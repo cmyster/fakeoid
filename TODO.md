@@ -4,7 +4,6 @@
    agent 6 returns to agent 4 if the end result does not give an exact output as expecxted.
 
 2. Currently only tested with a fresh project. what happens when we have:
-   a. partially donme project.
+   a. partially done project.
    b. broken project.
    c. complete project but we need to enhance.
-
