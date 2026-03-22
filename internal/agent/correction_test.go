@@ -14,7 +14,7 @@ func TestWriteCorrectionFile_Iter1Naming(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "tasks")
 
-	sb, err := sandbox.New(root)
+	sb, err := sandbox.New(root, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -29,7 +29,7 @@ func TestWriteCorrectionFile_Iter3Naming(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "tasks")
 
-	sb, err := sandbox.New(root)
+	sb, err := sandbox.New(root, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -43,7 +43,7 @@ func TestWriteCorrectionFile_ContentMatches(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "tasks")
 
-	sb, err := sandbox.New(root)
+	sb, err := sandbox.New(root, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -60,7 +60,7 @@ func TestWriteCorrectionFile_ReturnsAbsolutePath(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "tasks")
 
-	sb, err := sandbox.New(root)
+	sb, err := sandbox.New(root, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 

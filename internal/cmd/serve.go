@@ -13,7 +13,7 @@ var serveCmd = &cobra.Command{
 	Short: "Start server and send a test prompt",
 	Long:  "Starts llama-server (via root command lifecycle), sends a streaming test prompt, and prints tokens.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client := server.NewClient(srvPort)
+		client := server.NewClient(srvPort, 0, 0)
 		messages := []server.Message{
 			{Role: "user", Content: "Say hello in one sentence."},
 		}

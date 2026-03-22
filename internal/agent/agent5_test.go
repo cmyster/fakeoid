@@ -17,7 +17,7 @@ func TestAgent5_ImplementsAgent(t *testing.T) {
 	handoffFile := filepath.Join(dir, "001-task-handoff.md")
 	require.NoError(t, os.WriteFile(handoffFile, []byte("# Handoff\n\n## Files Modified/Created\n\n- internal/agent/foo.go (created)\n"), 0o644))
 
-	sb, err := sandbox.New(dir)
+	sb, err := sandbox.New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -48,7 +48,7 @@ func TestAgent5_SystemPrompt_ContainsContext(t *testing.T) {
 	handoffFile := filepath.Join(dir, "001-task-handoff.md")
 	require.NoError(t, os.WriteFile(handoffFile, []byte(handoffContent), 0o644))
 
-	sb, err := sandbox.New(dir)
+	sb, err := sandbox.New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -208,7 +208,7 @@ func TestReadBuildInstructions_ReadsExistingReadme(t *testing.T) {
 	content := "# My Project\n\n## Build\n\n```bash\nrustc src/main.rs\n```\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte(content), 0o644))
 
-	sb, err := sandbox.New(dir)
+	sb, err := sandbox.New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -218,7 +218,7 @@ func TestReadBuildInstructions_ReadsExistingReadme(t *testing.T) {
 
 func TestReadBuildInstructions_MissingReadme(t *testing.T) {
 	dir := t.TempDir()
-	sb, err := sandbox.New(dir)
+	sb, err := sandbox.New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 

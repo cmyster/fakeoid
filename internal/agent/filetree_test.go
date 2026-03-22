@@ -20,7 +20,7 @@ func TestScanFileTree(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "main.go"), []byte("pkg"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "util", "helper.go"), []byte("pkg"), 0o644))
 
-	result, err := ScanFileTree(dir, 3)
+	result, err := ScanFileTree(dir, 3, 0, nil)
 	require.NoError(t, err)
 
 	assert.Contains(t, result, "src/")
@@ -41,7 +41,7 @@ func TestScanFileTree_Excludes(t *testing.T) {
 	// Add a non-excluded file
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "keep.txt"), []byte("x"), 0o644))
 
-	result, err := ScanFileTree(dir, 3)
+	result, err := ScanFileTree(dir, 3, 0, nil)
 	require.NoError(t, err)
 
 	assert.Contains(t, result, "keep.txt")
@@ -58,7 +58,7 @@ func TestScanFileTree_MaxDepth(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a", "b", "c", "deep.txt"), []byte("x"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a", "shallow.txt"), []byte("x"), 0o644))
 
-	result, err := ScanFileTree(dir, 2)
+	result, err := ScanFileTree(dir, 2, 0, nil)
 	require.NoError(t, err)
 
 	assert.Contains(t, result, "shallow.txt")
@@ -74,7 +74,7 @@ func TestScanFileTree_MaxLines(t *testing.T) {
 		_ = os.WriteFile(name, []byte("x"), 0o644)
 	}
 
-	result, err := ScanFileTree(dir, 3)
+	result, err := ScanFileTree(dir, 3, 0, nil)
 	require.NoError(t, err)
 
 	lines := strings.Split(strings.TrimRight(result, "\n"), "\n")

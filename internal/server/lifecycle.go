@@ -16,6 +16,13 @@ type ServerConfig struct {
 	ModelPath       string
 	Port            int
 	CtxSize         int
+	GPULayers       string
+	FlashAttn       string
+	Host            string
+	LogBufferMax    int
+	KillTimeoutSec  int
+	HealthPollMs    int
+	HealthTimeoutMs int
 }
 
 // Server manages a llama-server subprocess.
@@ -41,26 +48,42 @@ func NewServer(cfg ServerConfig) *Server {
 	}
 	ctxSize := cfg.CtxSize
 	if ctxSize == 0 {
-		ctxSize = 8192
+		ctxSize = 16384
+	}
+	logBufMax := cfg.LogBufferMax
+	if logBufMax == 0 {
+		logBufMax = 200
 	}
 	return &Server{
 		cfg:       cfg,
 		port:      port,
 		ctxSize:   ctxSize,
-		logBuffer: NewLogBuffer(200),
+		logBuffer: NewLogBuffer(logBufMax),
 		exitCh:    make(chan error, 1),
 	}
 }
 
 // BuildCmd constructs the exec.Cmd for llama-server without starting it.
 func (s *Server) BuildCmd() *exec.Cmd {
+	gpuLayers := s.cfg.GPULayers
+	if gpuLayers == "" {
+		gpuLayers = "999"
+	}
+	flashAttn := s.cfg.FlashAttn
+	if flashAttn == "" {
+		flashAttn = "on"
+	}
+	host := s.cfg.Host
+	if host == "" {
+		host = "127.0.0.1"
+	}
 	cmd := exec.Command(s.cfg.LlamaServerPath,
 		"--model", s.cfg.ModelPath,
 		"--port", strconv.Itoa(s.port),
 		"--ctx-size", strconv.Itoa(s.ctxSize),
-		"--n-gpu-layers", "999",
-		"--flash-attn", "on",
-		"--host", "127.0.0.1",
+		"--n-gpu-layers", gpuLayers,
+		"--flash-attn", flashAttn,
+		"--host", host,
 	)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stderr = s.logBuffer
@@ -97,10 +120,19 @@ func (s *Server) Start(ctx context.Context) error {
 // WaitHealthy polls the /health endpoint until 200 OK, context cancellation,
 // or subprocess crash.
 func (s *Server) WaitHealthy(ctx context.Context) error {
-	ticker := time.NewTicker(500 * time.Millisecond)
+	pollMs := s.cfg.HealthPollMs
+	if pollMs == 0 {
+		pollMs = 500
+	}
+	timeoutMs := s.cfg.HealthTimeoutMs
+	if timeoutMs == 0 {
+		timeoutMs = 2000
+	}
+
+	ticker := time.NewTicker(time.Duration(pollMs) * time.Millisecond)
 	defer ticker.Stop()
 
-	client := &http.Client{Timeout: 2 * time.Second}
+	client := &http.Client{Timeout: time.Duration(timeoutMs) * time.Millisecond}
 	healthURL := fmt.Sprintf("http://127.0.0.1:%d/health", s.port)
 
 	for {
@@ -123,7 +155,7 @@ func (s *Server) WaitHealthy(ctx context.Context) error {
 	}
 }
 
-// Stop sends SIGTERM to the process group, waits 5s, then escalates to SIGKILL.
+// Stop sends SIGTERM to the process group, waits for the configured timeout, then escalates to SIGKILL.
 func (s *Server) Stop() error {
 	if !s.started || s.cmd == nil || s.cmd.Process == nil {
 		return nil
@@ -135,14 +167,19 @@ func (s *Server) Stop() error {
 		return nil
 	}
 
+	killTimeout := s.cfg.KillTimeoutSec
+	if killTimeout == 0 {
+		killTimeout = 5
+	}
+
 	// Send SIGTERM to process group
 	_ = syscall.Kill(-pgid, syscall.SIGTERM)
 
-	// Wait up to 5 seconds for clean exit
+	// Wait for clean exit
 	select {
 	case <-s.exitCh:
 		return nil
-	case <-time.After(5 * time.Second):
+	case <-time.After(time.Duration(killTimeout) * time.Second):
 		// Escalate to SIGKILL
 		_ = syscall.Kill(-pgid, syscall.SIGKILL)
 		<-s.exitCh

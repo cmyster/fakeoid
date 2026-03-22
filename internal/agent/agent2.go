@@ -21,7 +21,7 @@ type Agent2 struct {
 // It scans the file tree at construction time and sets tokenBudget to 60%
 // of ctxSize.
 func NewAgent2(cwd, taskDir, taskFile string, ctxSize int) *Agent2 {
-	tree, _ := ScanFileTree(cwd, 3)
+	tree, _ := ScanFileTree(cwd, 3, 0, nil)
 	return &Agent2{
 		cwd:         cwd,
 		taskDir:     taskDir,

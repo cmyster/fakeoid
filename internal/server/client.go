@@ -13,15 +13,25 @@ import (
 
 // Client communicates with a running llama-server instance.
 type Client struct {
-	port       int
-	httpClient *http.Client
+	port          int
+	httpClient    *http.Client
+	sseBufferSize int
 }
 
 // NewClient creates a new Client for the given port.
-func NewClient(port int) *Client {
+// chatTimeoutSec sets the HTTP timeout for non-streaming requests (0 = 10s default).
+// sseBufferSize sets the max SSE line buffer in bytes (0 = 1MB default).
+func NewClient(port int, chatTimeoutSec int, sseBufferSize int) *Client {
+	if chatTimeoutSec == 0 {
+		chatTimeoutSec = 10
+	}
+	if sseBufferSize == 0 {
+		sseBufferSize = 1024 * 1024
+	}
 	return &Client{
-		port:       port,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		port:          port,
+		httpClient:    &http.Client{Timeout: time.Duration(chatTimeoutSec) * time.Second},
+		sseBufferSize: sseBufferSize,
 	}
 }
 
@@ -102,7 +112,7 @@ func (c *Client) StreamChatCompletion(ctx context.Context, messages []Message, o
 	}
 
 	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024) // 1MB max line
+	scanner.Buffer(make([]byte, 0, c.sseBufferSize), c.sseBufferSize)
 
 	for scanner.Scan() {
 		line := scanner.Text()

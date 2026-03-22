@@ -13,7 +13,7 @@ import (
 
 func TestWriteFile_RelativePath_Succeeds(t *testing.T) {
 	dir := t.TempDir()
-	sb, err := New(dir)
+	sb, err := New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -27,7 +27,7 @@ func TestWriteFile_RelativePath_Succeeds(t *testing.T) {
 
 func TestWriteFile_AbsolutePath_Blocked(t *testing.T) {
 	dir := t.TempDir()
-	sb, err := New(dir)
+	sb, err := New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -39,7 +39,7 @@ func TestWriteFile_AbsolutePath_Blocked(t *testing.T) {
 
 func TestWriteFile_Traversal_Blocked(t *testing.T) {
 	dir := t.TempDir()
-	sb, err := New(dir)
+	sb, err := New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -57,7 +57,7 @@ func TestWriteFile_SymlinkOutsideCWD_Blocked(t *testing.T) {
 	err := os.Symlink(outside, link)
 	require.NoError(t, err)
 
-	sb, err := New(dir)
+	sb, err := New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -70,7 +70,7 @@ func TestWriteFile_SymlinkOutsideCWD_Blocked(t *testing.T) {
 
 func TestMkdirAll_RelativePath_Succeeds(t *testing.T) {
 	dir := t.TempDir()
-	sb, err := New(dir)
+	sb, err := New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -84,7 +84,7 @@ func TestMkdirAll_RelativePath_Succeeds(t *testing.T) {
 
 func TestMkdirAll_AbsolutePath_Blocked(t *testing.T) {
 	dir := t.TempDir()
-	sb, err := New(dir)
+	sb, err := New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -98,7 +98,7 @@ func TestMkdirAll_AbsolutePath_Blocked(t *testing.T) {
 
 func TestWriteFile_NestedDir_Succeeds(t *testing.T) {
 	dir := t.TempDir()
-	sb, err := New(dir)
+	sb, err := New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -120,7 +120,7 @@ func TestStat_ExistingFile_ReturnsInfo(t *testing.T) {
 	err := os.WriteFile(filepath.Join(dir, "existing.go"), []byte("hello"), 0o644)
 	require.NoError(t, err)
 
-	sb, err := New(dir)
+	sb, err := New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -133,7 +133,7 @@ func TestStat_ExistingFile_ReturnsInfo(t *testing.T) {
 
 func TestClose_ReleasesRoot(t *testing.T) {
 	dir := t.TempDir()
-	sb, err := New(dir)
+	sb, err := New(dir, nil)
 	require.NoError(t, err)
 
 	err = sb.Close()
@@ -144,7 +144,7 @@ func TestClose_ReleasesRoot(t *testing.T) {
 
 func TestCWD_ReturnsAbsolutePath(t *testing.T) {
 	dir := t.TempDir()
-	sb, err := New(dir)
+	sb, err := New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -160,7 +160,7 @@ func TestValidateRead_InsideCWD_Allowed(t *testing.T) {
 	err := os.WriteFile(f, []byte("x"), 0o644)
 	require.NoError(t, err)
 
-	sb, err := New(dir)
+	sb, err := New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -169,7 +169,7 @@ func TestValidateRead_InsideCWD_Allowed(t *testing.T) {
 }
 
 func TestValidateRead_EtcHostname_Allowed(t *testing.T) {
-	sb, err := New(t.TempDir())
+	sb, err := New(t.TempDir(), nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -178,7 +178,7 @@ func TestValidateRead_EtcHostname_Allowed(t *testing.T) {
 }
 
 func TestValidateRead_ProcCpuinfo_Allowed(t *testing.T) {
-	sb, err := New(t.TempDir())
+	sb, err := New(t.TempDir(), nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -187,7 +187,7 @@ func TestValidateRead_ProcCpuinfo_Allowed(t *testing.T) {
 }
 
 func TestValidateRead_OutsideAllowlist_Blocked(t *testing.T) {
-	sb, err := New(t.TempDir())
+	sb, err := New(t.TempDir(), nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -197,7 +197,7 @@ func TestValidateRead_OutsideAllowlist_Blocked(t *testing.T) {
 }
 
 func TestValidateRead_Tmp_Blocked(t *testing.T) {
-	sb, err := New(t.TempDir())
+	sb, err := New(t.TempDir(), nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -218,7 +218,7 @@ func TestValidateRead_SymlinkOutsideAllowlist_Blocked(t *testing.T) {
 	err = os.Symlink(outsideFile, link)
 	require.NoError(t, err)
 
-	sb, err := New(dir)
+	sb, err := New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 

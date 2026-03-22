@@ -14,7 +14,7 @@ func TestWriteTaskFile(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "tasks")
 
-	sb, err := sandbox.New(root)
+	sb, err := sandbox.New(root, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -33,7 +33,7 @@ func TestWriteTaskFile_Sequential(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "tasks")
 
-	sb, err := sandbox.New(root)
+	sb, err := sandbox.New(root, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -50,7 +50,7 @@ func TestWriteTaskFile_CreatesDir(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "deep", "nested", "tasks")
 
-	sb, err := sandbox.New(root)
+	sb, err := sandbox.New(root, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -70,25 +70,25 @@ func TestGenerateSlug(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
-			result := generateSlug(tc.input)
+			result := generateSlug(tc.input, 0)
 			assert.Equal(t, tc.expected, result)
 		})
 	}
 }
 
 func TestGenerateSlug_Empty(t *testing.T) {
-	assert.Equal(t, "task", generateSlug(""))
-	assert.Equal(t, "task", generateSlug("   "))
+	assert.Equal(t, "task", generateSlug("", 0))
+	assert.Equal(t, "task", generateSlug("   ", 0))
 }
 
 func TestGenerateSlug_MarkdownHeading(t *testing.T) {
-	assert.Equal(t, "fix-the-bug", generateSlug("# Fix the Bug"))
-	assert.Equal(t, "another-heading", generateSlug("## Another Heading"))
+	assert.Equal(t, "fix-the-bug", generateSlug("# Fix the Bug", 0))
+	assert.Equal(t, "another-heading", generateSlug("## Another Heading", 0))
 }
 
 func TestGenerateSlug_Truncation(t *testing.T) {
 	long := "This is a very long task title that should definitely be truncated at fifty characters or fewer"
-	slug := generateSlug(long)
+	slug := generateSlug(long, 0)
 	assert.LessOrEqual(t, len(slug), 50)
 	// Should not end with a hyphen
 	assert.NotEqual(t, '-', slug[len(slug)-1])

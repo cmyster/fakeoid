@@ -8,22 +8,35 @@ import (
 	"strings"
 )
 
+// defaultTreeExcludes is the default set of directory names to skip during tree scanning.
+var defaultTreeExcludes = map[string]bool{
+	".git":         true,
+	"node_modules": true,
+	"__pycache__":  true,
+	".venv":        true,
+	"vendor":       true,
+	"build":        true,
+	"dist":         true,
+	".fakeoid":     true,
+}
+
 // ScanFileTree returns a text representation of the directory tree rooted at dir,
 // limited to maxDepth levels and excluding common noise directories.
-// Output is capped at 200 lines; if exceeded, a truncation message is appended.
-func ScanFileTree(dir string, maxDepth int) (string, error) {
-	excludes := map[string]bool{
-		".git":        true,
-		"node_modules": true,
-		"__pycache__":  true,
-		".venv":       true,
-		"vendor":      true,
-		"build":       true,
-		"dist":        true,
-		".fakeoid":    true,
+// maxLines caps the output (0 = 200). excludes overrides the default exclude set
+// (nil = use defaults).
+func ScanFileTree(dir string, maxDepth int, maxLines int, excludes []string) (string, error) {
+	excludeMap := defaultTreeExcludes
+	if excludes != nil {
+		excludeMap = make(map[string]bool, len(excludes))
+		for _, e := range excludes {
+			excludeMap[e] = true
+		}
 	}
 
-	const maxLines = 200
+	if maxLines == 0 {
+		maxLines = 200
+	}
+
 	var lines []string
 	var extraCount int
 
@@ -45,7 +58,7 @@ func ScanFileTree(dir string, maxDepth int) (string, error) {
 			return nil
 		}
 
-		if d.IsDir() && excludes[d.Name()] {
+		if d.IsDir() && excludeMap[d.Name()] {
 			return filepath.SkipDir
 		}
 

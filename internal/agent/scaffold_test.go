@@ -55,7 +55,7 @@ func TestExtractFilePaths_MixedExtensions(t *testing.T) {
 
 func TestScaffoldFiles_NewGoFile(t *testing.T) {
 	root := t.TempDir()
-	sb, err := sandbox.New(root)
+	sb, err := sandbox.New(root, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -69,7 +69,7 @@ func TestScaffoldFiles_NewGoFile(t *testing.T) {
 
 func TestScaffoldFiles_NewNonGoFile(t *testing.T) {
 	root := t.TempDir()
-	sb, err := sandbox.New(root)
+	sb, err := sandbox.New(root, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -83,7 +83,7 @@ func TestScaffoldFiles_NewNonGoFile(t *testing.T) {
 
 func TestScaffoldFiles_ExistingFile(t *testing.T) {
 	root := t.TempDir()
-	sb, err := sandbox.New(root)
+	sb, err := sandbox.New(root, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -102,7 +102,7 @@ func TestScaffoldFiles_ExistingFile(t *testing.T) {
 
 func TestScaffoldFiles_NonFatal(t *testing.T) {
 	root := t.TempDir()
-	sb, err := sandbox.New(root)
+	sb, err := sandbox.New(root, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -114,7 +114,7 @@ func TestScaffoldFiles_NonFatal(t *testing.T) {
 
 func TestScaffoldFiles_RootGoFile(t *testing.T) {
 	root := t.TempDir()
-	sb, err := sandbox.New(root)
+	sb, err := sandbox.New(root, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -128,7 +128,7 @@ func TestScaffoldFiles_RootGoFile(t *testing.T) {
 
 func TestScaffoldFiles_MultipleFiles(t *testing.T) {
 	root := t.TempDir()
-	sb, err := sandbox.New(root)
+	sb, err := sandbox.New(root, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 

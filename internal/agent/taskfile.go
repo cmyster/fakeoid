@@ -31,7 +31,7 @@ func WriteTaskFile(sb *sandbox.Sandbox, taskDir string, content string) (string,
 	}
 
 	num := len(entries) + 1
-	slug := generateSlug(content)
+	slug := generateSlug(content, 0)
 	filename := fmt.Sprintf("%03d-%s-task.md", num, slug)
 	path := filepath.Join(taskDir, filename)
 
@@ -50,8 +50,13 @@ var slugRegexp = regexp.MustCompile(`[^a-z0-9]+`)
 
 // generateSlug creates a filename-safe slug from text.
 // It uses the first line, lowercases it, strips markdown heading markers,
-// replaces non-alphanumeric characters with hyphens, and truncates at 50 chars.
-func generateSlug(text string) string {
+// replaces non-alphanumeric characters with hyphens, and truncates at maxLen chars.
+// maxLen of 0 defaults to 50.
+func generateSlug(text string, maxLen int) string {
+	if maxLen == 0 {
+		maxLen = 50
+	}
+
 	line := strings.SplitN(text, "\n", 2)[0]
 	line = strings.TrimSpace(line)
 
@@ -64,10 +69,10 @@ func generateSlug(text string) string {
 	slug := slugRegexp.ReplaceAllString(line, "-")
 	slug = strings.Trim(slug, "-")
 
-	if len(slug) > 50 {
-		slug = slug[:50]
+	if len(slug) > maxLen {
+		slug = slug[:maxLen]
 		// Don't end on a partial word -- find last hyphen
-		if idx := strings.LastIndex(slug, "-"); idx > 20 {
+		if idx := strings.LastIndex(slug, "-"); idx > maxLen/2 {
 			slug = slug[:idx]
 		}
 	}

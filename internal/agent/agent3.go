@@ -24,7 +24,7 @@ type Agent3 struct {
 // directory, task directory, task file path, and AST markdown. It scans the
 // file tree at construction time (static per session).
 func NewAgent3(cwd, taskDir, taskFile, astMarkdown string) *Agent3 {
-	tree, _ := ScanFileTree(cwd, 3)
+	tree, _ := ScanFileTree(cwd, 3, 0, nil)
 	return &Agent3{
 		cwd:         cwd,
 		taskDir:     taskDir,

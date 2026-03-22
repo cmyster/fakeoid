@@ -254,7 +254,7 @@ func TestShell_TriggerGoWritesTaskFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(cwd, "go.mod"),
 		[]byte("module example.com/test\n\ngo 1.21\n"), 0o644))
 
-	sb, err := sandbox.New(cwd)
+	sb, err := sandbox.New(cwd, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -387,7 +387,7 @@ func TestShell_Agent4_Activation(t *testing.T) {
 	a1 := agent.NewAgent1(cwd, taskDir)
 	runner.ActivateAgent(a1)
 
-	sb, err := sandbox.New(cwd)
+	sb, err := sandbox.New(cwd, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -457,7 +457,7 @@ func TestShell_Agent4_StreamingVisible(t *testing.T) {
 	a1 := agent.NewAgent1(cwd, taskDir)
 	runner.ActivateAgent(a1)
 
-	sb, err := sandbox.New(cwd)
+	sb, err := sandbox.New(cwd, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -506,7 +506,7 @@ func TestShell_Agent4_NoFilesOnCancel(t *testing.T) {
 	a1 := agent.NewAgent1(cwd, taskDir)
 	runner.ActivateAgent(a1)
 
-	sb, err := sandbox.New(cwd)
+	sb, err := sandbox.New(cwd, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -562,7 +562,7 @@ func TestFeedbackLoop_PassesOnFirstIteration(t *testing.T) {
 		},
 	}
 
-	sb, err := sandbox.New(cwd)
+	sb, err := sandbox.New(cwd, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -636,7 +636,7 @@ func TestFeedbackLoop_RetriesOnFailure(t *testing.T) {
 		},
 	}
 
-	sb, err := sandbox.New(cwd)
+	sb, err := sandbox.New(cwd, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -691,7 +691,7 @@ func TestFeedbackLoop_PrintsTransitions(t *testing.T) {
 		},
 	}
 
-	sb, err := sandbox.New(cwd)
+	sb, err := sandbox.New(cwd, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -765,7 +765,7 @@ func TestPipeline_ReturnsToAgent1AfterCompletion(t *testing.T) {
 	// Write go.mod in cwd for go test to work
 	require.NoError(t, os.WriteFile(filepath.Join(cwd, "go.mod"), []byte("module testmod\n\ngo 1.21\n"), 0o644))
 
-	sb, err := sandbox.New(cwd)
+	sb, err := sandbox.New(cwd, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -809,7 +809,7 @@ func TestAgent5Phase_WritesTestFiles(t *testing.T) {
 		},
 	}
 
-	sb, err := sandbox.New(cwd)
+	sb, err := sandbox.New(cwd, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -848,7 +848,7 @@ func TestAgent4FixPhase_InjectsFailureOutput(t *testing.T) {
 		},
 	}
 
-	sb, err := sandbox.New(cwd)
+	sb, err := sandbox.New(cwd, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -1038,7 +1038,7 @@ func TestPipeline_SwitchAgentClearsHistory(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(filepath.Join(cwd, "go.mod"), []byte("module testmod\n\ngo 1.21\n"), 0o644))
 
-	sb, err := sandbox.New(cwd)
+	sb, err := sandbox.New(cwd, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -1294,7 +1294,7 @@ func TestResumeLastTask_FromHandoff(t *testing.T) {
 		},
 	}
 
-	sb, err := sandbox.New(cwd)
+	sb, err := sandbox.New(cwd, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 

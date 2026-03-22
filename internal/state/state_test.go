@@ -31,7 +31,7 @@ func TestLoadHistory_Corrupt(t *testing.T) {
 
 func TestSaveAndLoad(t *testing.T) {
 	tmp := t.TempDir()
-	sb, err := sandbox.New(tmp)
+	sb, err := sandbox.New(tmp, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -59,7 +59,7 @@ func TestSaveAndLoad(t *testing.T) {
 
 func TestAppendRecord(t *testing.T) {
 	tmp := t.TempDir()
-	sb, err := sandbox.New(tmp)
+	sb, err := sandbox.New(tmp, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -95,7 +95,7 @@ func TestAppendRecord(t *testing.T) {
 
 func TestAppendRecord_NewFile(t *testing.T) {
 	tmp := t.TempDir()
-	sb, err := sandbox.New(tmp)
+	sb, err := sandbox.New(tmp, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -156,7 +156,7 @@ func TestRebuildFromTaskFiles(t *testing.T) {
 
 func TestEnsureGitignore_NoFile(t *testing.T) {
 	tmp := t.TempDir()
-	sb, err := sandbox.New(tmp)
+	sb, err := sandbox.New(tmp, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -174,7 +174,7 @@ func TestEnsureGitignore_AlreadyPresent(t *testing.T) {
 	content := "node_modules/\n.fakeoid/\n"
 	require.NoError(t, os.WriteFile(filepath.Join(tmp, ".gitignore"), []byte(content), 0o644))
 
-	sb, err := sandbox.New(tmp)
+	sb, err := sandbox.New(tmp, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -191,7 +191,7 @@ func TestEnsureGitignore_Appends(t *testing.T) {
 	content := "node_modules/\n"
 	require.NoError(t, os.WriteFile(filepath.Join(tmp, ".gitignore"), []byte(content), 0o644))
 
-	sb, err := sandbox.New(tmp)
+	sb, err := sandbox.New(tmp, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 

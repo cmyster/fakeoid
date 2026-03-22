@@ -43,6 +43,21 @@ type Shell struct {
 	stdout      io.Writer
 	stderr      io.Writer
 	lastReadEOF bool // set when EOF encountered during multi-line continuation
+
+	// Configurable values (set via options, zero = use hardcoded defaults)
+	historyLimit          int
+	startupHistoryMax     int
+	historyTrimPct        int
+	terminalWidthFallback int
+	taskNameTruncLen      int
+	tokenBudgetPct        int
+	tokenCharDivisor      int
+	maxIterations         int
+	slugMaxLen            int
+	treeMaxDepth          int
+	treeMaxLines          int
+	treeExcludes          []string
+	historyFile           string
 }
 
 // Option configures the Shell for testing or customization.
@@ -56,6 +71,21 @@ type shellConfig struct {
 	cwd      string
 	sandbox  *sandbox.Sandbox
 	stateDir string
+
+	// Configurable values
+	historyLimit          int
+	startupHistoryMax     int
+	historyTrimPct        int
+	terminalWidthFallback int
+	taskNameTruncLen      int
+	tokenBudgetPct        int
+	tokenCharDivisor      int
+	maxIterations         int
+	slugMaxLen            int
+	treeMaxDepth          int
+	treeMaxLines          int
+	treeExcludes          []string
+	historyFile           string
 }
 
 // WithStdin sets a custom stdin for the readline instance (useful for testing).
@@ -107,6 +137,71 @@ func WithStateDir(path string) Option {
 	}
 }
 
+// WithHistoryLimit sets the readline history limit.
+func WithHistoryLimit(n int) Option {
+	return func(c *shellConfig) { c.historyLimit = n }
+}
+
+// WithStartupHistoryMax sets the maximum history records shown at startup.
+func WithStartupHistoryMax(n int) Option {
+	return func(c *shellConfig) { c.startupHistoryMax = n }
+}
+
+// WithHistoryTrimPct sets the context usage percentage that triggers history trimming.
+func WithHistoryTrimPct(n int) Option {
+	return func(c *shellConfig) { c.historyTrimPct = n }
+}
+
+// WithTerminalWidthFallback sets the fallback terminal width.
+func WithTerminalWidthFallback(n int) Option {
+	return func(c *shellConfig) { c.terminalWidthFallback = n }
+}
+
+// WithTaskNameTruncLen sets the task name truncation length in history display.
+func WithTaskNameTruncLen(n int) Option {
+	return func(c *shellConfig) { c.taskNameTruncLen = n }
+}
+
+// WithTokenBudgetPct sets the token budget percentage for file injection.
+func WithTokenBudgetPct(n int) Option {
+	return func(c *shellConfig) { c.tokenBudgetPct = n }
+}
+
+// WithTokenCharDivisor sets the character-to-token divisor.
+func WithTokenCharDivisor(n int) Option {
+	return func(c *shellConfig) { c.tokenCharDivisor = n }
+}
+
+// WithMaxIterations sets the maximum feedback loop iterations.
+func WithMaxIterations(n int) Option {
+	return func(c *shellConfig) { c.maxIterations = n }
+}
+
+// WithSlugMaxLen sets the maximum slug length for task filenames.
+func WithSlugMaxLen(n int) Option {
+	return func(c *shellConfig) { c.slugMaxLen = n }
+}
+
+// WithTreeMaxDepth sets the file tree scan max depth.
+func WithTreeMaxDepth(n int) Option {
+	return func(c *shellConfig) { c.treeMaxDepth = n }
+}
+
+// WithTreeMaxLines sets the file tree output max lines.
+func WithTreeMaxLines(n int) Option {
+	return func(c *shellConfig) { c.treeMaxLines = n }
+}
+
+// WithTreeExcludes sets the file tree excluded directory names.
+func WithTreeExcludes(excludes []string) Option {
+	return func(c *shellConfig) { c.treeExcludes = excludes }
+}
+
+// WithHistoryFile sets the history index filename.
+func WithHistoryFile(name string) Option {
+	return func(c *shellConfig) { c.historyFile = name }
+}
+
 // New creates a new Shell instance with readline configured for interactive input.
 func New(client ChatClient, ctxSize int, modelName, gpuName, historyPath string, opts ...Option) (*Shell, error) {
 	cfg := &shellConfig{
@@ -117,10 +212,15 @@ func New(client ChatClient, ctxSize int, modelName, gpuName, historyPath string,
 		opt(cfg)
 	}
 
+	histLimit := cfg.historyLimit
+	if histLimit == 0 {
+		histLimit = 500
+	}
+
 	rlCfg := &readline.Config{
 		Prompt:          ColorPrompt.Sprint("fakeoid> "),
 		HistoryFile:     historyPath,
-		HistoryLimit:    500,
+		HistoryLimit:    histLimit,
 		InterruptPrompt: "^C",
 		Stdout:          cfg.stdout,
 		Stderr:          cfg.stderr,
@@ -135,18 +235,77 @@ func New(client ChatClient, ctxSize int, modelName, gpuName, historyPath string,
 		return nil, fmt.Errorf("initialize readline: %w", err)
 	}
 
+	// Apply defaults for configurable values
+	startupMax := cfg.startupHistoryMax
+	if startupMax == 0 {
+		startupMax = 5
+	}
+	trimPct := cfg.historyTrimPct
+	if trimPct == 0 {
+		trimPct = 80
+	}
+	termWidth := cfg.terminalWidthFallback
+	if termWidth == 0 {
+		termWidth = 80
+	}
+	truncLen := cfg.taskNameTruncLen
+	if truncLen == 0 {
+		truncLen = 40
+	}
+	budgetPct := cfg.tokenBudgetPct
+	if budgetPct == 0 {
+		budgetPct = 60
+	}
+	charDiv := cfg.tokenCharDivisor
+	if charDiv == 0 {
+		charDiv = 4
+	}
+	maxIter := cfg.maxIterations
+	if maxIter == 0 {
+		maxIter = 10
+	}
+	slugMax := cfg.slugMaxLen
+	if slugMax == 0 {
+		slugMax = 50
+	}
+	treeDepth := cfg.treeMaxDepth
+	if treeDepth == 0 {
+		treeDepth = 3
+	}
+	treeLines := cfg.treeMaxLines
+	if treeLines == 0 {
+		treeLines = 200
+	}
+	histFile := cfg.historyFile
+	if histFile == "" {
+		histFile = "history.json"
+	}
+
 	return &Shell{
-		rl:        rl,
-		client:    client,
-		runner:    cfg.runner,
-		cwd:       cfg.cwd,
-		sandbox:   cfg.sandbox,
-		stateDir:  cfg.stateDir,
-		ctxSize:   ctxSize,
-		modelName: modelName,
-		gpuName:   gpuName,
-		stdout:    cfg.stdout,
-		stderr:    cfg.stderr,
+		rl:                    rl,
+		client:                client,
+		runner:                cfg.runner,
+		cwd:                   cfg.cwd,
+		sandbox:               cfg.sandbox,
+		stateDir:              cfg.stateDir,
+		ctxSize:               ctxSize,
+		modelName:             modelName,
+		gpuName:               gpuName,
+		stdout:                cfg.stdout,
+		stderr:                cfg.stderr,
+		historyLimit:          histLimit,
+		startupHistoryMax:     startupMax,
+		historyTrimPct:        trimPct,
+		terminalWidthFallback: termWidth,
+		taskNameTruncLen:      truncLen,
+		tokenBudgetPct:        budgetPct,
+		tokenCharDivisor:      charDiv,
+		maxIterations:         maxIter,
+		slugMaxLen:            slugMax,
+		treeMaxDepth:          treeDepth,
+		treeMaxLines:          treeLines,
+		treeExcludes:          cfg.treeExcludes,
+		historyFile:           histFile,
 	}, nil
 }
 
@@ -413,7 +572,7 @@ func (s *Shell) Run(ctx context.Context) error {
 		}()
 
 		// Create display writer for word-wrapped streaming output
-		dw := NewDisplayWriter(s.stdout, GetTermWidth())
+		dw := NewDisplayWriter(s.stdout, GetTermWidthWithFallback(s.terminalWidthFallback))
 
 		// Capture response text alongside display
 		var responseBuf strings.Builder
@@ -508,7 +667,7 @@ func (s *Shell) streamResponse(ctx context.Context) (string, error) {
 		}
 	}()
 
-	dw := NewDisplayWriter(s.stdout, GetTermWidth())
+	dw := NewDisplayWriter(s.stdout, GetTermWidthWithFallback(s.terminalWidthFallback))
 	var responseBuf strings.Builder
 	onToken := func(token string) {
 		dw.WriteToken(token)
@@ -544,17 +703,17 @@ func (s *Shell) streamResponse(ctx context.Context) (string, error) {
 // showStartupHistory loads and displays task history on shell startup.
 // Returns true if the last task is resumable (interrupted or failed).
 func (s *Shell) showStartupHistory() bool {
-	idx, _ := state.LoadHistory(filepath.Join(s.stateDir, "history.json"))
+	idx, _ := state.LoadHistory(filepath.Join(s.stateDir, s.historyFile))
 	if len(idx.Records) == 0 {
 		PrintFirstRun(s.stderr)
 		fmt.Fprintln(s.stderr)
 		return false
 	}
 	records := idx.Records
-	if len(records) > 5 {
-		records = records[len(records)-5:]
+	if len(records) > s.startupHistoryMax {
+		records = records[len(records)-s.startupHistoryMax:]
 	}
-	PrintHistoryTable(s.stderr, records)
+	PrintHistoryTable(s.stderr, records, s.taskNameTruncLen)
 	fmt.Fprintln(s.stderr)
 
 	last := idx.Records[len(idx.Records)-1]
@@ -648,9 +807,9 @@ func (s *Shell) historyDetail(index int) {
 	PrintHistoryDetail(s.stderr, record.TaskName, fm)
 }
 
-// trimHistory drops oldest user+assistant pairs when context usage exceeds 80%.
+// trimHistory drops oldest user+assistant pairs when context usage exceeds the configured threshold.
 func (s *Shell) trimHistory() {
-	threshold := s.ctxSize * 80 / 100
+	threshold := s.ctxSize * s.historyTrimPct / 100
 
 	if s.runner != nil {
 		for s.usedTokens > threshold && s.runner.HistoryLen() > 3 {
@@ -1302,7 +1461,7 @@ func (s *Shell) runAgent4FixPhase(ctx context.Context, taskFilePath, testOutput 
 // Returns whether tests passed, accumulated agent outcomes, and any error.
 func (s *Shell) runFeedbackLoop(ctx context.Context, handoffPath, taskFilePath string) (bool, []state.AgentOutcome, error) {
 	var outcomes []state.AgentOutcome
-	for i := 1; ; i++ {
+	for i := 1; i <= s.maxIterations; i++ {
 		fmt.Fprintf(s.stderr, "\n--- Feedback Loop: Iteration %d ---\n\n", i)
 
 		PrintTransition(s.stderr, 5, "QE Engineer")
@@ -1352,6 +1511,10 @@ func (s *Shell) runFeedbackLoop(ctx context.Context, handoffPath, taskFilePath s
 			return false, outcomes, fixErr
 		}
 	}
+
+	// Max iterations exceeded
+	fmt.Fprintf(s.stderr, "\n--- Feedback Loop: max iterations (%d) reached ---\n", s.maxIterations)
+	return false, outcomes, fmt.Errorf("feedback loop exceeded %d iterations", s.maxIterations)
 }
 
 // printPipelineComplete prints the pipeline result banner.

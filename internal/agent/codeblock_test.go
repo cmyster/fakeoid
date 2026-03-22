@@ -62,7 +62,7 @@ func TestParseCodeBlocks_EmptyContent(t *testing.T) {
 
 func TestWriteCodeBlocks_CreatesFiles(t *testing.T) {
 	dir := t.TempDir()
-	sb, err := sandbox.New(dir)
+	sb, err := sandbox.New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -82,7 +82,7 @@ func TestWriteCodeBlocks_CreatesFiles(t *testing.T) {
 
 func TestWriteCodeBlocks_CreatesSubdirectories(t *testing.T) {
 	dir := t.TempDir()
-	sb, err := sandbox.New(dir)
+	sb, err := sandbox.New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -103,7 +103,7 @@ func TestWriteCodeBlocks_ModifiedExisting(t *testing.T) {
 	// Create existing file
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "existing.go"), []byte("old"), 0o644))
 
-	sb, err := sandbox.New(dir)
+	sb, err := sandbox.New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -118,7 +118,7 @@ func TestWriteCodeBlocks_ModifiedExisting(t *testing.T) {
 
 func TestWriteCodeBlocks_BlocksPathTraversal(t *testing.T) {
 	dir := t.TempDir()
-	sb, err := sandbox.New(dir)
+	sb, err := sandbox.New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -133,7 +133,7 @@ func TestWriteCodeBlocks_BlocksPathTraversal(t *testing.T) {
 
 func TestWriteCodeBlocks_BlocksAbsolutePath(t *testing.T) {
 	dir := t.TempDir()
-	sb, err := sandbox.New(dir)
+	sb, err := sandbox.New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 

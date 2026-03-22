@@ -79,7 +79,7 @@ func TestWriteChangePlanFile_CreatesFile(t *testing.T) {
 	dir := t.TempDir()
 	taskDir := filepath.Join(dir, "tasks")
 
-	sb, err := sandbox.New(dir)
+	sb, err := sandbox.New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -98,7 +98,7 @@ func TestWriteChangePlanFile_FilenameDeriving(t *testing.T) {
 	dir := t.TempDir()
 	taskDir := filepath.Join(dir, "tasks")
 
-	sb, err := sandbox.New(dir)
+	sb, err := sandbox.New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -111,7 +111,7 @@ func TestWriteChangePlanFile_WritesThroughSandbox(t *testing.T) {
 	dir := t.TempDir()
 	taskDir := filepath.Join(dir, "tasks")
 
-	sb, err := sandbox.New(dir)
+	sb, err := sandbox.New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 

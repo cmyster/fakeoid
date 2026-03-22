@@ -26,8 +26,10 @@ type BlockedFile struct {
 }
 
 // New creates a Sandbox rooted at the given working directory.
-// The read allowlist is set to [cwd, "/etc", "/proc"].
-func New(cwd string) (*Sandbox, error) {
+// extraReadPaths provides additional read-allowed path prefixes.
+// If extraReadPaths is nil, defaults to ["/etc", "/proc"].
+// CWD is always included in the allowlist.
+func New(cwd string, extraReadPaths []string) (*Sandbox, error) {
 	abs, err := filepath.Abs(cwd)
 	if err != nil {
 		return nil, fmt.Errorf("resolve cwd: %w", err)
@@ -36,10 +38,18 @@ func New(cwd string) (*Sandbox, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open root: %w", err)
 	}
+
+	readAllow := []string{abs}
+	if extraReadPaths == nil {
+		readAllow = append(readAllow, "/etc", "/proc")
+	} else {
+		readAllow = append(readAllow, extraReadPaths...)
+	}
+
 	return &Sandbox{
 		cwd:       abs,
 		root:      root,
-		readAllow: []string{abs, "/etc", "/proc"},
+		readAllow: readAllow,
 	}, nil
 }
 

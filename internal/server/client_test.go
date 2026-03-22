@@ -61,7 +61,7 @@ func TestChatCompletion_Success(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	client := NewClient(testServerPort(t, ts))
+	client := NewClient(testServerPort(t, ts), 0, 0)
 	content, err := client.ChatCompletion(context.Background(), []Message{
 		{Role: "user", Content: "Hi"},
 	})
@@ -76,7 +76,7 @@ func TestChatCompletion_HTTPError(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	client := NewClient(testServerPort(t, ts))
+	client := NewClient(testServerPort(t, ts), 0, 0)
 	_, err := client.ChatCompletion(context.Background(), []Message{
 		{Role: "user", Content: "Hi"},
 	})
@@ -92,7 +92,7 @@ func TestChatCompletion_EmptyChoices(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	client := NewClient(testServerPort(t, ts))
+	client := NewClient(testServerPort(t, ts), 0, 0)
 	_, err := client.ChatCompletion(context.Background(), []Message{
 		{Role: "user", Content: "Hi"},
 	})
@@ -108,7 +108,7 @@ func TestChatCompletion_MalformedJSON(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	client := NewClient(testServerPort(t, ts))
+	client := NewClient(testServerPort(t, ts), 0, 0)
 	_, err := client.ChatCompletion(context.Background(), []Message{
 		{Role: "user", Content: "Hi"},
 	})
@@ -126,7 +126,7 @@ func TestChatCompletion_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately
 
-	client := NewClient(testServerPort(t, ts))
+	client := NewClient(testServerPort(t, ts), 0, 0)
 	_, err := client.ChatCompletion(ctx, []Message{
 		{Role: "user", Content: "Hi"},
 	})
@@ -203,7 +203,7 @@ func TestStreamChatCompletion_Success(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	client := NewClient(testServerPort(t, ts))
+	client := NewClient(testServerPort(t, ts), 0, 0)
 	var tokens []string
 	var mu sync.Mutex
 	result, err := client.StreamChatCompletion(context.Background(), []Message{
@@ -236,7 +236,7 @@ func TestStreamChatCompletion_EmptyDeltas(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	client := NewClient(testServerPort(t, ts))
+	client := NewClient(testServerPort(t, ts), 0, 0)
 	var tokens []string
 	_, err := client.StreamChatCompletion(context.Background(), []Message{
 		{Role: "user", Content: "Hi"},
@@ -254,7 +254,7 @@ func TestStreamChatCompletion_HTTPError(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	client := NewClient(testServerPort(t, ts))
+	client := NewClient(testServerPort(t, ts), 0, 0)
 	var called bool
 	_, err := client.StreamChatCompletion(context.Background(), []Message{
 		{Role: "user", Content: "Hi"},
@@ -286,7 +286,7 @@ func TestStreamChatCompletion_SkipsNonDataLines(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	client := NewClient(testServerPort(t, ts))
+	client := NewClient(testServerPort(t, ts), 0, 0)
 	var tokens []string
 	_, err := client.StreamChatCompletion(context.Background(), []Message{
 		{Role: "user", Content: "Hi"},
@@ -309,7 +309,7 @@ func TestStreamChatCompletion_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately
 
-	client := NewClient(testServerPort(t, ts))
+	client := NewClient(testServerPort(t, ts), 0, 0)
 	_, err := client.StreamChatCompletion(ctx, []Message{
 		{Role: "user", Content: "Hi"},
 	}, func(token string) {})
@@ -372,7 +372,7 @@ func TestStreamChatCompletion_ReturnsUsage(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	client := NewClient(testServerPort(t, ts))
+	client := NewClient(testServerPort(t, ts), 0, 0)
 	var tokens []string
 	result, err := client.StreamChatCompletion(context.Background(), []Message{
 		{Role: "user", Content: "Hi"},
@@ -399,7 +399,7 @@ func TestStreamChatCompletion_ZeroUsageWhenMissing(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	client := NewClient(testServerPort(t, ts))
+	client := NewClient(testServerPort(t, ts), 0, 0)
 	result, err := client.StreamChatCompletion(context.Background(), []Message{
 		{Role: "user", Content: "Hi"},
 	}, func(token string) {})
@@ -426,7 +426,7 @@ func TestStreamChatCompletion_OnTokenStillReceivesAllDeltas(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	client := NewClient(testServerPort(t, ts))
+	client := NewClient(testServerPort(t, ts), 0, 0)
 	var tokens []string
 	result, err := client.StreamChatCompletion(context.Background(), []Message{
 		{Role: "user", Content: "Hi"},

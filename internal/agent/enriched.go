@@ -56,11 +56,17 @@ func EstimateTokens(content string) int {
 }
 
 // TokenBudget computes the available token budget for file injection.
-// It reserves 60% of the context window for file content, minus the estimated
-// tokens for the system prompt and task content. Returns 0 if the result
-// would be negative.
-func TokenBudget(ctxSize int, systemPromptChars int, taskChars int) int {
-	budget := ctxSize*60/100 - systemPromptChars/4 - taskChars/4
+// budgetPct is the percentage of context to reserve (0 = 60%).
+// charDivisor is the chars-per-token estimate (0 = 4).
+// Returns 0 if the result would be negative.
+func TokenBudget(ctxSize int, systemPromptChars int, taskChars int, budgetPct int, charDivisor int) int {
+	if budgetPct == 0 {
+		budgetPct = 60
+	}
+	if charDivisor == 0 {
+		charDivisor = 4
+	}
+	budget := ctxSize*budgetPct/100 - systemPromptChars/charDivisor - taskChars/charDivisor
 	if budget < 0 {
 		return 0
 	}

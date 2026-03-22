@@ -32,7 +32,7 @@ type Agent5 struct {
 // tree, reads the handoff content, extracts referenced source files, and reads them
 // from disk.
 func NewAgent5(cwd, taskDir, handoffFile string, sb *sandbox.Sandbox, readmeContent string) *Agent5 {
-	tree, _ := ScanFileTree(cwd, 3)
+	tree, _ := ScanFileTree(cwd, 3, 0, nil)
 
 	handoffContent := ""
 	if handoffFile != "" {

@@ -15,7 +15,7 @@ func TestWriteTestResultsFile_BasicNaming(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "tasks")
 
-	sb, err := sandbox.New(root)
+	sb, err := sandbox.New(root, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -30,7 +30,7 @@ func TestWriteTestResultsFile_Content(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "tasks")
 
-	sb, err := sandbox.New(root)
+	sb, err := sandbox.New(root, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -52,7 +52,7 @@ func TestWriteTestResultsFile_FailResult(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "tasks")
 
-	sb, err := sandbox.New(root)
+	sb, err := sandbox.New(root, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -68,7 +68,7 @@ func TestWriteTestResultsFile_Iteration3(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "tasks")
 
-	sb, err := sandbox.New(root)
+	sb, err := sandbox.New(root, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -82,7 +82,7 @@ func TestWriteTestResultsFile_CreatesDir(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "deep", "nested", "tasks")
 
-	sb, err := sandbox.New(root)
+	sb, err := sandbox.New(root, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 

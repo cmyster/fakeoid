@@ -26,7 +26,7 @@ type Agent1 struct {
 // directory and task output directory. It scans the file tree at construction
 // time (static per session).
 func NewAgent1(cwd, taskDir string) *Agent1 {
-	tree, _ := ScanFileTree(cwd, 3)
+	tree, _ := ScanFileTree(cwd, 3, 0, nil)
 	return &Agent1{
 		state:   stateGathering,
 		cwd:     cwd,

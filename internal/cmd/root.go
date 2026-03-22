@@ -30,6 +30,9 @@ var srvPort int
 // gpuName is cached during PersistentPreRunE for the shell banner.
 var gpuName string
 
+// cfg holds the loaded configuration, shared between PersistentPreRunE and RunE.
+var cfg *model.ModelConfig
+
 var rootCmd = &cobra.Command{
 	Use:   "fakeoid",
 	Short: "Local AI coding assistant",
@@ -66,8 +69,8 @@ var rootCmd = &cobra.Command{
 
 		// --- Server lifecycle startup ---
 
-		// Load config for port/ctx-size overrides
-		cfg, _ := model.LoadConfig()
+		// Load config for all overrides
+		cfg, _ = model.LoadConfig()
 
 		// Resolve llama-server path (already validated by RunAll above)
 		llamaPath, err := exec.LookPath("llama-server")
@@ -87,14 +90,23 @@ var rootCmd = &cobra.Command{
 			ModelPath:       modelPath,
 			Port:            cfg.EffectivePort(),
 			CtxSize:         cfg.EffectiveCtxSize(),
+			GPULayers:       cfg.EffectiveGPULayers(),
+			FlashAttn:       cfg.EffectiveFlashAttn(),
+			Host:            cfg.EffectiveHost(),
+			LogBufferMax:    cfg.EffectiveLogBufferMax(),
+			KillTimeoutSec:  cfg.EffectiveKillTimeoutSec(),
+			HealthPollMs:    cfg.EffectiveHealthPollMs(),
+			HealthTimeoutMs: cfg.EffectiveHealthTimeoutMs(),
 		})
 
-		// Create a context with timeout for health check (120s)
-		healthCtx, healthCancel := context.WithTimeout(cmd.Context(), 120*time.Second)
+		startupTimeout := time.Duration(cfg.EffectiveStartupTimeoutSec()) * time.Second
+
+		// Create a context with timeout for health check
+		healthCtx, healthCancel := context.WithTimeout(cmd.Context(), startupTimeout)
 		defer healthCancel()
 
 		// Create spinner
-		sp := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+		sp := spinner.New(spinner.CharSets[14], time.Duration(cfg.EffectiveSpinnerIntervalMs())*time.Millisecond)
 		sp.Suffix = " Starting llama-server..."
 		sp.Writer = os.Stderr
 		sp.Start()
@@ -110,7 +122,7 @@ var rootCmd = &cobra.Command{
 			sp.Stop()
 			// Determine error type
 			if healthCtx.Err() == context.DeadlineExceeded {
-				fmt.Fprintf(os.Stderr, "error: llama-server did not become healthy within 120s\n")
+				fmt.Fprintf(os.Stderr, "error: llama-server did not become healthy within %ds\n", cfg.EffectiveStartupTimeoutSec())
 			} else if cmd.Context().Err() != nil {
 				// Signal received (Ctrl+C) — cleanup handled by Execute() goroutine
 				fmt.Fprintf(os.Stderr, "\n")
@@ -136,11 +148,13 @@ var rootCmd = &cobra.Command{
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, _ := model.LoadConfig()
+		if cfg == nil {
+			cfg, _ = model.LoadConfig()
+		}
 
 		// Build history path
 		home, _ := os.UserHomeDir()
-		historyDir := filepath.Join(home, ".fakeoid")
+		historyDir := filepath.Join(home, cfg.EffectiveConfigDirName())
 		if err := os.MkdirAll(historyDir, 0o755); err != nil {
 			return fmt.Errorf("create history directory: %s", err)
 		}
@@ -152,32 +166,46 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("get working directory: %s", err)
 		}
 
-		sb, err := sandbox.New(cwd)
+		sb, err := sandbox.New(cwd, cfg.EffectiveReadAllowPaths())
 		if err != nil {
 			return fmt.Errorf("initialize sandbox: %s", err)
 		}
 		defer sb.Close()
 
 		// Set up state directory for task history persistence
-		stateDir := filepath.Join(cwd, ".fakeoid")
+		stateDir := filepath.Join(cwd, cfg.EffectiveConfigDirName())
 		if err := state.EnsureGitignore(sb); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not update .gitignore: %s\n", err)
 		}
-		if err := sb.MkdirAll(".fakeoid/tasks", 0o755); err != nil {
+		taskSubpath := filepath.Join(cfg.EffectiveConfigDirName(), cfg.EffectiveTaskSubdir())
+		if err := sb.MkdirAll(taskSubpath, 0o755); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not create state directory: %s\n", err)
 		}
 
-		taskDir := filepath.Join(cwd, ".fakeoid", "tasks")
+		taskDir := filepath.Join(cwd, cfg.EffectiveConfigDirName(), cfg.EffectiveTaskSubdir())
 		runner := agent.NewAgentRunner(taskDir)
 		a1 := agent.NewAgent1(cwd, taskDir)
 		runner.ActivateAgent(a1)
 
-		client := server.NewClient(srvPort)
-		sh, err := shell.New(client, cfg.EffectiveCtxSize(), model.DefaultModelName, gpuName, historyPath,
+		client := server.NewClient(srvPort, cfg.EffectiveChatTimeoutSec(), cfg.EffectiveSSEBufferSize())
+		sh, err := shell.New(client, cfg.EffectiveCtxSize(), cfg.EffectiveModelName(), gpuName, historyPath,
 			shell.WithAgentRunner(runner),
 			shell.WithCWD(cwd),
 			shell.WithSandbox(sb),
 			shell.WithStateDir(stateDir),
+			shell.WithHistoryLimit(cfg.EffectiveHistoryLimit()),
+			shell.WithStartupHistoryMax(cfg.EffectiveStartupHistoryMax()),
+			shell.WithHistoryTrimPct(cfg.EffectiveHistoryTrimPct()),
+			shell.WithTerminalWidthFallback(cfg.EffectiveTerminalWidthFallback()),
+			shell.WithTaskNameTruncLen(cfg.EffectiveTaskNameTruncLen()),
+			shell.WithTokenBudgetPct(cfg.EffectiveTokenBudgetPct()),
+			shell.WithTokenCharDivisor(cfg.EffectiveTokenCharDivisor()),
+			shell.WithMaxIterations(cfg.EffectiveMaxIterations()),
+			shell.WithSlugMaxLen(cfg.EffectiveSlugMaxLen()),
+			shell.WithTreeMaxDepth(cfg.EffectiveTreeMaxDepth()),
+			shell.WithTreeMaxLines(cfg.EffectiveTreeMaxLines()),
+			shell.WithTreeExcludes(cfg.EffectiveTreeExcludes()),
+			shell.WithHistoryFile(cfg.EffectiveHistoryFile()),
 		)
 		if err != nil {
 			return fmt.Errorf("failed to initialize shell: %s", err)

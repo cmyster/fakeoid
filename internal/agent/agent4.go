@@ -24,7 +24,7 @@ type Agent4 struct {
 // directory, task directory, and task file path. It scans the file tree at
 // construction time (static per session).
 func NewAgent4(cwd, taskDir, taskFile, changePlanFile string) *Agent4 {
-	tree, _ := ScanFileTree(cwd, 3)
+	tree, _ := ScanFileTree(cwd, 3, 0, nil)
 	return &Agent4{
 		cwd:            cwd,
 		taskDir:        taskDir,

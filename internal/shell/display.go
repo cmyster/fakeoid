@@ -192,14 +192,18 @@ func PrintTransition(out io.Writer, agentNum int, agentName string) {
 }
 
 // PrintHistoryTable prints a compact table of recent task history records.
-func PrintHistoryTable(out io.Writer, records []state.HistoryRecord) {
+// taskNameTruncLen controls how long task names can be before truncation (0 = 40).
+func PrintHistoryTable(out io.Writer, records []state.HistoryRecord, taskNameTruncLen int) {
+	if taskNameTruncLen == 0 {
+		taskNameTruncLen = 40
+	}
 	fmt.Fprintln(out, "Recent tasks:")
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "#\tDate\tTask\tResult")
 	for i, r := range records {
 		taskName := r.TaskName
-		if len(taskName) > 40 {
-			taskName = taskName[:40]
+		if len(taskName) > taskNameTruncLen {
+			taskName = taskName[:taskNameTruncLen]
 		}
 		var symbol string
 		switch r.Outcome {
@@ -279,9 +283,18 @@ func PrintHistoryDetail(out io.Writer, taskName string, fm state.TaskFrontmatter
 
 // GetTermWidth returns the current terminal width, falling back to 80 if detection fails.
 func GetTermWidth() int {
+	return GetTermWidthWithFallback(80)
+}
+
+// GetTermWidthWithFallback returns the current terminal width, falling back to
+// the given value if detection fails.
+func GetTermWidthWithFallback(fallback int) int {
+	if fallback <= 0 {
+		fallback = 80
+	}
 	width, _, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil || width <= 0 {
-		return 80
+		return fallback
 	}
 	return width
 }

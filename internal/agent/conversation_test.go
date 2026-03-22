@@ -89,7 +89,7 @@ func TestWriteConversationFile_NoIteration(t *testing.T) {
 	dir := t.TempDir()
 	taskDir := filepath.Join(dir, "tasks")
 
-	sb, err := sandbox.New(dir)
+	sb, err := sandbox.New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -116,7 +116,7 @@ func TestWriteConversationFile_WithIteration(t *testing.T) {
 	dir := t.TempDir()
 	taskDir := filepath.Join(dir, "tasks")
 
-	sb, err := sandbox.New(dir)
+	sb, err := sandbox.New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -136,7 +136,7 @@ func TestWriteConversationFile_Agent5WithIteration(t *testing.T) {
 	dir := t.TempDir()
 	taskDir := filepath.Join(dir, "tasks")
 
-	sb, err := sandbox.New(dir)
+	sb, err := sandbox.New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -156,7 +156,7 @@ func TestWriteConversationFile_FrontmatterContent(t *testing.T) {
 	dir := t.TempDir()
 	taskDir := filepath.Join(dir, "tasks")
 
-	sb, err := sandbox.New(dir)
+	sb, err := sandbox.New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 

@@ -67,13 +67,13 @@ func TestEstimateTokens_Eight(t *testing.T) {
 func TestTokenBudget_Normal(t *testing.T) {
 	// ctxSize=8192, systemPromptChars=2000, taskChars=1000
 	// budget = 8192*60/100 - 2000/4 - 1000/4 = 4915 - 500 - 250 = 4165
-	result := TokenBudget(8192, 2000, 1000)
+	result := TokenBudget(8192, 2000, 1000, 0, 0)
 	assert.Equal(t, 4165, result)
 }
 
 func TestTokenBudget_ClampsToZero(t *testing.T) {
 	// Small ctxSize where overhead exceeds budget
-	result := TokenBudget(10, 10000, 10000)
+	result := TokenBudget(10, 10000, 10000, 0, 0)
 	assert.Equal(t, 0, result)
 }
 
@@ -125,7 +125,7 @@ func TestWriteEnrichedFile_CreatesFile(t *testing.T) {
 	dir := t.TempDir()
 	taskDir := filepath.Join(dir, "tasks")
 
-	sb, err := sandbox.New(dir)
+	sb, err := sandbox.New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -144,7 +144,7 @@ func TestWriteEnrichedFile_FilenameDeriving(t *testing.T) {
 	dir := t.TempDir()
 	taskDir := filepath.Join(dir, "tasks")
 
-	sb, err := sandbox.New(dir)
+	sb, err := sandbox.New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
@@ -157,7 +157,7 @@ func TestWriteEnrichedFile_WritesThroughSandbox(t *testing.T) {
 	dir := t.TempDir()
 	taskDir := filepath.Join(dir, "tasks")
 
-	sb, err := sandbox.New(dir)
+	sb, err := sandbox.New(dir, nil)
 	require.NoError(t, err)
 	defer sb.Close()
 
