@@ -1,8 +1,14 @@
 # fakeoid
 
-A tool of sorts that would use several agents
+A tool of sorts that would use several agents to acheive simple coding tasks.
 
+## Requirments
+I am using this for my own hardware, so this tool expects AMD GPU, ROCm and since this tool would also compile and test code, whichever build chains that you need to have.
+It was build using Go and uses llama-server and git.
+
+## Usage
   1. Build it
+  clone and cd.
   go build -o fakeoid ./cmd/fakeoid/
 
   2. Check prerequisites
@@ -11,7 +17,7 @@ A tool of sorts that would use several agents
 
   3. Download a model (if you haven't already)
   ./fakeoid download
-  Auto-fetches a GGUF model sized for your 24GB VRAM.
+  Auto-fetches a GGUF model.
 
   4. Run it
   cd /some/test/project   # any Go project directory
