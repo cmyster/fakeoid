@@ -351,3 +351,89 @@ func TestEffectiveSliceFieldsNilVsEmpty(t *testing.T) {
 	assert.Empty(t, cfg2.EffectiveReadAllowPaths(), "empty ReadAllowPaths should return empty")
 	assert.Empty(t, cfg2.EffectiveAllowedBuildCommands(), "empty AllowedBuildCommands should return empty")
 }
+
+// TestConfigSampleIsValidAndComplete reads the actual config.json.sample file,
+// strips // comment lines, unmarshals it, and verifies all fields match defaults.
+func TestConfigSampleIsValidAndComplete(t *testing.T) {
+	// Read the sample file from repo root (two dirs up from model/)
+	samplePath := filepath.Join("..", "..", "config.json.sample")
+	data, err := os.ReadFile(samplePath)
+	require.NoError(t, err, "config.json.sample should exist at repo root")
+
+	// Strip // comment lines
+	var lines []string
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "//") {
+			lines = append(lines, line)
+		}
+	}
+	cleaned := strings.Join(lines, "\n")
+
+	var cfg ModelConfig
+	require.NoError(t, json.Unmarshal([]byte(cleaned), &cfg), "sample file should be valid JSON after stripping comments")
+
+	// Verify sample defaults match Effective* defaults from an empty config
+	empty := &ModelConfig{}
+
+	// Existing fields
+	assert.Equal(t, empty.EffectivePort(), cfg.Port, "port")
+	assert.Equal(t, empty.EffectiveCtxSize(), cfg.CtxSize, "ctx_size")
+	// model_path is empty in sample (user must set it), so skip
+
+	// Model identity
+	assert.Equal(t, empty.EffectiveModelRepo(), cfg.ModelRepo, "model_repo")
+	assert.Equal(t, empty.EffectiveModelFile(), cfg.ModelFile, "model_file")
+	assert.Equal(t, empty.EffectiveModelURL(), cfg.ModelURL, "model_url")
+	assert.Equal(t, empty.EffectiveModelHash(), cfg.ModelHash, "model_hash")
+	assert.Equal(t, empty.EffectiveModelSize(), cfg.ModelSize, "model_size")
+	assert.Equal(t, empty.EffectiveModelName(), cfg.ModelName, "model_name")
+
+	// Server
+	assert.Equal(t, empty.EffectiveGPULayers(), cfg.GPULayers, "gpu_layers")
+	assert.Equal(t, empty.EffectiveFlashAttn(), cfg.FlashAttn, "flash_attn")
+	assert.Equal(t, empty.EffectiveHost(), cfg.Host, "host")
+	assert.Equal(t, empty.EffectiveLogBufferMax(), cfg.LogBufferMax, "log_buffer_max")
+
+	// Timeouts
+	assert.Equal(t, empty.EffectiveKillTimeoutSec(), cfg.KillTimeoutSec, "kill_timeout_seconds")
+	assert.Equal(t, empty.EffectiveHealthPollMs(), cfg.HealthPollMs, "health_poll_ms")
+	assert.Equal(t, empty.EffectiveHealthTimeoutMs(), cfg.HealthTimeoutMs, "health_timeout_ms")
+	assert.Equal(t, empty.EffectiveChatTimeoutSec(), cfg.ChatTimeoutSec, "chat_timeout_seconds")
+	assert.Equal(t, empty.EffectiveStartupTimeoutSec(), cfg.StartupTimeoutSec, "startup_timeout_seconds")
+	assert.Equal(t, empty.EffectiveSpinnerIntervalMs(), cfg.SpinnerIntervalMs, "spinner_interval_ms")
+
+	// Token budget
+	assert.Equal(t, empty.EffectiveTokenBudgetPct(), cfg.TokenBudgetPct, "token_budget_pct")
+	assert.Equal(t, empty.EffectiveHistoryTrimPct(), cfg.HistoryTrimPct, "history_trim_pct")
+	assert.Equal(t, empty.EffectiveTokenCharDivisor(), cfg.TokenCharDivisor, "token_char_divisor")
+
+	// UI/Display
+	assert.Equal(t, empty.EffectiveHistoryLimit(), cfg.HistoryLimit, "history_limit")
+	assert.Equal(t, empty.EffectiveTerminalWidthFallback(), cfg.TerminalWidthFallback, "terminal_width_fallback")
+	assert.Equal(t, empty.EffectiveStartupHistoryMax(), cfg.StartupHistoryMax, "startup_history_max")
+	assert.Equal(t, empty.EffectiveTaskNameTruncLen(), cfg.TaskNameTruncLen, "task_name_trunc_len")
+	assert.Equal(t, empty.EffectiveSlugMaxLen(), cfg.SlugMaxLen, "slug_max_len")
+
+	// Filesystem
+	assert.Equal(t, empty.EffectiveConfigDirName(), cfg.ConfigDirName, "config_dir_name")
+	assert.Equal(t, empty.EffectiveModelSubdir(), cfg.ModelSubdir, "model_subdir")
+	assert.Equal(t, empty.EffectiveTaskSubdir(), cfg.TaskSubdir, "task_subdir")
+	assert.Equal(t, empty.EffectiveHistoryFile(), cfg.HistoryFile, "history_file")
+	assert.Equal(t, empty.EffectiveConfigFile(), cfg.ConfigFile, "config_file")
+
+	// File tree scanner
+	assert.Equal(t, empty.EffectiveTreeMaxDepth(), cfg.TreeMaxDepth, "tree_max_depth")
+	assert.Equal(t, empty.EffectiveTreeMaxLines(), cfg.TreeMaxLines, "tree_max_lines")
+	assert.Equal(t, empty.EffectiveTreeExcludes(), cfg.TreeExcludes, "tree_excludes")
+
+	// Sandbox
+	assert.Equal(t, empty.EffectiveReadAllowPaths(), cfg.ReadAllowPaths, "read_allow_paths")
+	assert.Equal(t, empty.EffectiveAllowedBuildCommands(), cfg.AllowedBuildCommands, "allowed_build_commands")
+
+	// Streaming
+	assert.Equal(t, empty.EffectiveSSEBufferSize(), cfg.SSEBufferSize, "sse_buffer_size")
+
+	// Feedback loop
+	assert.Equal(t, empty.EffectiveMaxIterations(), cfg.MaxIterations, "max_iterations")
+}
