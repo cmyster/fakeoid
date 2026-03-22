@@ -1,0 +1,103 @@
+// Fakeoid Configuration
+// Copy to ~/.fakeoid/config.json and modify as needed.
+// Remove all lines starting with // before use (JSON does not support comments).
+// Any omitted key uses its default value shown below.
+{
+  // --- Model Identity ---
+  // HuggingFace repository for the model
+  "model_repo": "bartowski/Qwen2.5-Coder-32B-Instruct-GGUF",
+  // GGUF filename within the repository
+  "model_file": "Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf",
+  // Direct download URL for the model
+  "model_url": "https://huggingface.co/bartowski/Qwen2.5-Coder-32B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf",
+  // Expected SHA256 hash for integrity verification
+  "model_hash": "8e2fd78ff55e7cdf577fda257bac2776feb7d73d922613caf35468073807e815",
+  // Expected file size in bytes (~19.85 GB)
+  "model_size": 19900000000,
+  // Human-readable model name shown in the shell banner
+  "model_name": "Qwen2.5-Coder-32B-Q4_K_M",
+  // Override the full path to the cached model file (default: ~/.fakeoid/models/<model_file>)
+  "model_path": "",
+
+  // --- Server ---
+  // Port for the llama-server HTTP API
+  "port": 8080,
+  // Context window size in tokens
+  "ctx_size": 16384,
+  // Number of GPU layers to offload ("999" = all)
+  "gpu_layers": "999",
+  // Flash attention mode ("on" or "off")
+  "flash_attn": "on",
+  // Bind address for llama-server
+  "host": "127.0.0.1",
+  // Maximum lines kept in the server log buffer
+  "log_buffer_max": 200,
+
+  // --- Timeouts ---
+  // Seconds to wait after SIGTERM before sending SIGKILL
+  "kill_timeout_seconds": 5,
+  // Milliseconds between health check polls during startup
+  "health_poll_ms": 500,
+  // Milliseconds timeout for each health check HTTP request
+  "health_timeout_ms": 2000,
+  // Seconds timeout for chat completion HTTP requests
+  "chat_timeout_seconds": 10,
+  // Seconds to wait for llama-server to become healthy at startup
+  "startup_timeout_seconds": 120,
+  // Milliseconds between spinner animation frames
+  "spinner_interval_ms": 100,
+
+  // --- Token Budget ---
+  // Percentage of context window reserved for file injection (Agent 2)
+  "token_budget_pct": 60,
+  // Percentage of context window that triggers history trimming
+  "history_trim_pct": 80,
+  // Character-to-token divisor for rough token estimation (chars/N)
+  "token_char_divisor": 4,
+
+  // --- UI/Display ---
+  // Maximum number of readline history entries
+  "history_limit": 500,
+  // Fallback terminal width when detection fails
+  "terminal_width_fallback": 80,
+  // Maximum number of task history records shown at startup
+  "startup_history_max": 5,
+  // Maximum characters for task name in history table
+  "task_name_trunc_len": 40,
+  // Maximum characters for generated task filename slugs
+  "slug_max_len": 50,
+
+  // --- Filesystem ---
+  // Name of the configuration/state directory (under $HOME and project CWD)
+  "config_dir_name": ".fakeoid",
+  // Subdirectory under config dir for cached models
+  "model_subdir": "models",
+  // Subdirectory under config dir for task history files
+  "task_subdir": "tasks",
+  // Filename for the task history index
+  "history_file": "history.json",
+  // Filename for the user configuration
+  "config_file": "config.json",
+
+  // --- File Tree Scanner ---
+  // Maximum directory depth for file tree scanning
+  "tree_max_depth": 3,
+  // Maximum lines in file tree output before truncation
+  "tree_max_lines": 200,
+  // Directory names to exclude from file tree scans
+  "tree_excludes": [".git", "node_modules", "__pycache__", ".venv", "vendor", "build", "dist", ".fakeoid"],
+
+  // --- Sandbox ---
+  // Additional read-allowed path prefixes (CWD is always included)
+  "read_allow_paths": ["/etc", "/proc"],
+  // Allowed build/compile commands for sandbox execution
+  "allowed_build_commands": ["cargo", "rustc", "make", "cmake", "gcc", "g++", "clang", "clang++", "npm", "npx", "node", "go", "python", "python3", "pip"],
+
+  // --- Streaming ---
+  // Maximum SSE line buffer size in bytes (default 1MB)
+  "sse_buffer_size": 1048576,
+
+  // --- Feedback Loop ---
+  // Maximum iterations for the Agent 5/6 feedback loop before stopping
+  "max_iterations": 10
+}
