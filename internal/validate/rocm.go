@@ -75,6 +75,7 @@ func parseROCmInfo(output string) ([]GPUInfo, error) {
 			Name:          extractField(block, "Name:"),
 			MarketingName: extractField(block, "Marketing Name:"),
 			VRAMSizeKB:    extractCoarseGrainedSize(block),
+			ComputeUnits:  extractComputeUnits(block),
 		}
 		gpus = append(gpus, gpu)
 	}
@@ -134,6 +135,20 @@ func extractField(block, key string) string {
 		}
 	}
 	return ""
+}
+
+// extractComputeUnits extracts the Compute Unit count from an agent block.
+// Returns 0 if the field is missing or unparseable.
+func extractComputeUnits(block string) int {
+	cuStr := extractField(block, "Compute Unit:")
+	if cuStr == "" {
+		return 0
+	}
+	cu, err := strconv.Atoi(strings.TrimSpace(cuStr))
+	if err != nil {
+		return 0
+	}
+	return cu
 }
 
 // extractCoarseGrainedSize extracts the VRAM size in KB from the first

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"strconv"
 	"syscall"
@@ -23,6 +24,8 @@ type ServerConfig struct {
 	KillTimeoutSec  int
 	HealthPollMs    int
 	HealthTimeoutMs int
+	GPUComputePct   int
+	TotalCUs        int
 }
 
 // Server manages a llama-server subprocess.
@@ -86,9 +89,28 @@ func (s *Server) BuildCmd() *exec.Cmd {
 		"--host", host,
 	)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
+	// Inject HSA_CU_MASK to limit GPU compute when configured below 100%
+	if s.cfg.GPUComputePct > 0 && s.cfg.GPUComputePct < 100 && s.cfg.TotalCUs > 0 {
+		cmd.Env = append(os.Environ(), "HSA_CU_MASK="+buildCUMask(s.cfg.GPUComputePct, s.cfg.TotalCUs))
+	}
+
 	cmd.Stderr = s.logBuffer
 	cmd.Stdout = s.logBuffer
 	return cmd
+}
+
+// buildCUMask computes the HSA_CU_MASK value for the given percentage and total CUs.
+// The enabled count is rounded down to the nearest even number for RDNA3 WGP compatibility.
+// Returns a mask string in the format "0:0-N" where N is the last enabled CU index.
+func buildCUMask(pct, totalCUs int) string {
+	enabled := totalCUs * pct / 100
+	// Round down to nearest even (WGP pairs for RDNA3)
+	enabled = enabled &^ 1
+	if enabled < 2 {
+		enabled = 2
+	}
+	return fmt.Sprintf("0:0-%d", enabled-1)
 }
 
 // Start starts the llama-server subprocess.

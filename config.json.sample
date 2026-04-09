@@ -32,6 +32,8 @@
   "host": "127.0.0.1",
   // Maximum lines kept in the server log buffer
   "log_buffer_max": 200,
+  // Percentage of GPU compute units to use (10-100, default 100 = all CUs)
+  "gpu_compute_pct": 100,
 
   // --- Timeouts ---
   // Seconds to wait after SIGTERM before sending SIGKILL

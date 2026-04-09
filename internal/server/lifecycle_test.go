@@ -206,6 +206,94 @@ func TestLogDump(t *testing.T) {
 	assert.Equal(t, []string{"line1", "line2", "line3"}, lines)
 }
 
+func TestBuildCUMask(t *testing.T) {
+	tests := []struct {
+		name     string
+		pct      int
+		totalCUs int
+		expected string
+	}{
+		{"75pct of 96 CUs", 75, 96, "0:0-71"},
+		{"50pct of 96 CUs", 50, 96, "0:0-47"},
+		{"75pct of 60 CUs (round to even)", 75, 60, "0:0-43"},
+		{"25pct of 96 CUs", 25, 96, "0:0-23"},
+		{"10pct of 96 CUs", 10, 96, "0:0-7"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildCUMask(tt.pct, tt.totalCUs)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestBuildCmdWithCUMask(t *testing.T) {
+	cfg := ServerConfig{
+		LlamaServerPath: "/usr/bin/llama-server",
+		ModelPath:        "/models/test.gguf",
+		Port:             8080,
+		CtxSize:          8192,
+		GPUComputePct:    75,
+		TotalCUs:         96,
+	}
+	s := NewServer(cfg)
+	cmd := s.BuildCmd()
+
+	require.NotNil(t, cmd.Env)
+	assert.Greater(t, len(cmd.Env), 1, "should include inherited env vars")
+
+	found := false
+	for _, env := range cmd.Env {
+		if env == "HSA_CU_MASK=0:0-71" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "HSA_CU_MASK=0:0-71 should be in cmd.Env")
+}
+
+func TestBuildCmdNoCUMask(t *testing.T) {
+	cfg := ServerConfig{
+		LlamaServerPath: "/usr/bin/llama-server",
+		ModelPath:        "/models/test.gguf",
+		Port:             8080,
+		CtxSize:          8192,
+		GPUComputePct:    0,
+		TotalCUs:         96,
+	}
+	s := NewServer(cfg)
+	cmd := s.BuildCmd()
+	assert.Nil(t, cmd.Env, "cmd.Env should be nil when GPUComputePct is 0 (default)")
+}
+
+func TestBuildCmdNoCUMaskAt100(t *testing.T) {
+	cfg := ServerConfig{
+		LlamaServerPath: "/usr/bin/llama-server",
+		ModelPath:        "/models/test.gguf",
+		Port:             8080,
+		CtxSize:          8192,
+		GPUComputePct:    100,
+		TotalCUs:         96,
+	}
+	s := NewServer(cfg)
+	cmd := s.BuildCmd()
+	assert.Nil(t, cmd.Env, "cmd.Env should be nil when GPUComputePct is 100")
+}
+
+func TestBuildCmdNoCUMaskZeroCUs(t *testing.T) {
+	cfg := ServerConfig{
+		LlamaServerPath: "/usr/bin/llama-server",
+		ModelPath:        "/models/test.gguf",
+		Port:             8080,
+		CtxSize:          8192,
+		GPUComputePct:    75,
+		TotalCUs:         0,
+	}
+	s := NewServer(cfg)
+	cmd := s.BuildCmd()
+	assert.Nil(t, cmd.Env, "cmd.Env should be nil when TotalCUs is 0 (unknown)")
+}
+
 func TestShutdownSIGTERM(t *testing.T) {
 	// Use a real subprocess (sleep) to test Stop
 	cmd := exec.Command("sleep", "60")

@@ -52,10 +52,12 @@ var rootCmd = &cobra.Command{
 				return fmt.Errorf("%s", r.Error)
 			}
 		}
-		// Cache GPU name for shell banner
+		// Cache GPU name and CU count for shell banner and compute throttling
 		gpuName = "unknown"
+		var totalCUs int
 		if gpuResult, gpus, _ := validate.CheckGPU(&validate.ExecRunner{}, false); gpuResult != nil && gpuResult.Passed && len(gpus) > 0 {
 			gpuName = gpus[0].Name
+			totalCUs = gpus[0].ComputeUnits
 		}
 
 		// Auto-download model if not cached
@@ -97,6 +99,8 @@ var rootCmd = &cobra.Command{
 			KillTimeoutSec:  cfg.EffectiveKillTimeoutSec(),
 			HealthPollMs:    cfg.EffectiveHealthPollMs(),
 			HealthTimeoutMs: cfg.EffectiveHealthTimeoutMs(),
+			GPUComputePct:   cfg.EffectiveGPUComputePct(),
+			TotalCUs:        totalCUs,
 		})
 
 		startupTimeout := time.Duration(cfg.EffectiveStartupTimeoutSec()) * time.Second

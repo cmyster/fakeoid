@@ -20,12 +20,12 @@ It was build using Go and uses llama-server and git.
   Auto-fetches a GGUF model.
 
   4. Run it
-  cd /some/test/project   # any Go project directory
+  cd /some/test/project
   path/fakeoid/fakeoid
 
   This starts llama-server, shows the interactive prompt, and activates Agent 1.
 
-  5. Give it a task
+  5. Give it a task.
 
   Describe something simple to Agent 1, like:
   ▎ Create a cli application in Zig that prints the current running kernel version.

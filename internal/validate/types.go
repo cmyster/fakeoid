@@ -33,4 +33,5 @@ type GPUInfo struct {
 	Name          string
 	MarketingName string
 	VRAMSizeKB    uint64
+	ComputeUnits  int
 }

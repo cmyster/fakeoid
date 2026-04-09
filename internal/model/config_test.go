@@ -185,6 +185,9 @@ func TestAllEffectiveDefaults(t *testing.T) {
 
 	// Feedback loop
 	assert.Equal(t, 10, cfg.EffectiveMaxIterations())
+
+	// GPU compute throttling
+	assert.Equal(t, 100, cfg.EffectiveGPUComputePct())
 }
 
 // TestLoadConfigAllFields writes a JSON with all fields set to non-default values,
@@ -233,6 +236,7 @@ func TestLoadConfigAllFields(t *testing.T) {
 		AllowedBuildCommands:  []string{"cargo", "make"},
 		SSEBufferSize:         2 * 1024 * 1024,
 		MaxIterations:         20,
+		GPUComputePct:         75,
 	}
 
 	data, err := json.Marshal(cfg)
@@ -281,6 +285,7 @@ func TestLoadConfigAllFields(t *testing.T) {
 	assert.Equal(t, cfg.AllowedBuildCommands, loaded.AllowedBuildCommands)
 	assert.Equal(t, cfg.SSEBufferSize, loaded.SSEBufferSize)
 	assert.Equal(t, cfg.MaxIterations, loaded.MaxIterations)
+	assert.Equal(t, cfg.GPUComputePct, loaded.GPUComputePct)
 
 	// Verify Effective* methods return the custom values (not defaults)
 	assert.Equal(t, 9090, loaded.EffectivePort())
@@ -301,6 +306,7 @@ func TestLoadConfigAllFields(t *testing.T) {
 	assert.Equal(t, []string{"cargo", "make"}, loaded.EffectiveAllowedBuildCommands())
 	assert.Equal(t, 2*1024*1024, loaded.EffectiveSSEBufferSize())
 	assert.Equal(t, 20, loaded.EffectiveMaxIterations())
+	assert.Equal(t, 75, loaded.EffectiveGPUComputePct())
 }
 
 // TestLoadConfigBackwardCompatibleExtended verifies that a 3-field config from
@@ -436,4 +442,27 @@ func TestConfigSampleIsValidAndComplete(t *testing.T) {
 
 	// Feedback loop
 	assert.Equal(t, empty.EffectiveMaxIterations(), cfg.MaxIterations, "max_iterations")
+
+	// GPU compute throttling
+	assert.Equal(t, empty.EffectiveGPUComputePct(), cfg.GPUComputePct, "gpu_compute_pct")
+}
+
+func TestEffectiveGPUComputePctDefault(t *testing.T) {
+	cfg := &ModelConfig{}
+	assert.Equal(t, 100, cfg.EffectiveGPUComputePct())
+}
+
+func TestEffectiveGPUComputePctCustom(t *testing.T) {
+	cfg := &ModelConfig{GPUComputePct: 75}
+	assert.Equal(t, 75, cfg.EffectiveGPUComputePct())
+}
+
+func TestEffectiveGPUComputePctFloor(t *testing.T) {
+	cfg := &ModelConfig{GPUComputePct: 5}
+	assert.Equal(t, 10, cfg.EffectiveGPUComputePct())
+}
+
+func TestEffectiveGPUComputePctCap(t *testing.T) {
+	cfg := &ModelConfig{GPUComputePct: 150}
+	assert.Equal(t, 100, cfg.EffectiveGPUComputePct())
 }

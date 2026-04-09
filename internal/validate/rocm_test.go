@@ -53,6 +53,7 @@ Agent 1
   Marketing Name:          AMD Ryzen 9 5900X 12-Core Processor
   Vendor Name:             CPU
   Feature:                 None specified
+  Compute Unit:            24
   Device Type:             CPU
   Pool Info:
     Pool 1
@@ -65,6 +66,7 @@ Agent 2
   Marketing Name:          AMD Radeon RX 7900 XTX
   Vendor Name:             AMD
   Feature:                 KERNEL_DISPATCH
+  Compute Unit:            96
   Device Type:             GPU
   Pool Info:
     Pool 1
@@ -91,6 +93,7 @@ func TestCheckGPU_Found(t *testing.T) {
 	require.Len(t, gpus, 1)
 	assert.Equal(t, "gfx1100", gpus[0].Name)
 	assert.Equal(t, "AMD Radeon RX 7900 XTX", gpus[0].MarketingName)
+	assert.Equal(t, 96, gpus[0].ComputeUnits)
 	assert.Contains(t, result.Detail, "gfx1100")
 }
 
@@ -141,6 +144,7 @@ Agent 1
 *******
   Name:                    AMD Ryzen 9 5900X 12-Core Processor
   Marketing Name:          AMD Ryzen 9 5900X 12-Core Processor
+  Compute Unit:            24
   Device Type:             CPU
   Pool Info:
     Pool 1
@@ -151,6 +155,7 @@ Agent 2
 *******
   Name:                    gfx1100
   Marketing Name:          AMD Radeon RX 7900 XTX
+  Compute Unit:            96
   Device Type:             GPU
   Pool Info:
     Pool 1
@@ -161,6 +166,7 @@ Agent 3
 *******
   Name:                    gfx1030
   Marketing Name:          AMD Radeon RX 6800 XT
+  Compute Unit:            72
   Device Type:             GPU
   Pool Info:
     Pool 1
@@ -182,7 +188,9 @@ func TestCheckGPU_MultipleAgents(t *testing.T) {
 	// Only GPU agents returned, not CPU
 	require.Len(t, gpus, 2)
 	assert.Equal(t, "gfx1100", gpus[0].Name)
+	assert.Equal(t, 96, gpus[0].ComputeUnits)
 	assert.Equal(t, "gfx1030", gpus[1].Name)
+	assert.Equal(t, 72, gpus[1].ComputeUnits)
 }
 
 func TestCheckGPU_VRAMExtraction(t *testing.T) {

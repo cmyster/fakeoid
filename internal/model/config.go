@@ -44,10 +44,11 @@ type ModelConfig struct {
 	ModelName string `json:"model_name"`
 
 	// Server
-	GPULayers    string `json:"gpu_layers"`
-	FlashAttn    string `json:"flash_attn"`
-	Host         string `json:"host"`
-	LogBufferMax int    `json:"log_buffer_max"`
+	GPULayers     string `json:"gpu_layers"`
+	FlashAttn     string `json:"flash_attn"`
+	Host          string `json:"host"`
+	LogBufferMax  int    `json:"log_buffer_max"`
+	GPUComputePct int    `json:"gpu_compute_pct"`
 
 	// Timeouts
 	KillTimeoutSec    int `json:"kill_timeout_seconds"`
@@ -196,6 +197,21 @@ func (c *ModelConfig) EffectiveLogBufferMax() int {
 		return 200
 	}
 	return c.LogBufferMax
+}
+
+// EffectiveGPUComputePct returns the configured GPU compute percentage or 100.
+// Clamps to the range [10, 100].
+func (c *ModelConfig) EffectiveGPUComputePct() int {
+	if c.GPUComputePct == 0 {
+		return 100
+	}
+	if c.GPUComputePct < 10 {
+		return 10
+	}
+	if c.GPUComputePct > 100 {
+		return 100
+	}
+	return c.GPUComputePct
 }
 
 // EffectiveKillTimeoutSec returns the configured kill timeout or 5 seconds.
