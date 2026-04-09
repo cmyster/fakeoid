@@ -77,9 +77,9 @@ func TestPrintBanner(t *testing.T) {
 	ColorBanner.DisableColor()
 	defer ColorBanner.EnableColor()
 
-	PrintBanner(&buf, "Qwen2.5-Coder-32B-Q4_K_M", "gfx1100")
+	PrintBanner(&buf, "Gemma-4-31B-Q4_K_M", "gfx1100")
 
-	assert.Equal(t, "Model: Qwen2.5-Coder-32B-Q4_K_M | GPU: gfx1100\n", buf.String())
+	assert.Equal(t, "Model: Gemma-4-31B-Q4_K_M | GPU: gfx1100\n", buf.String())
 }
 
 func TestWriteToken_ForcBreakLongWord(t *testing.T) {

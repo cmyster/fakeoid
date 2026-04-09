@@ -9,22 +9,22 @@ import (
 
 const (
 	// DefaultModelRepo is the HuggingFace repository for the default model.
-	DefaultModelRepo = "bartowski/Qwen2.5-Coder-32B-Instruct-GGUF"
+	DefaultModelRepo = "bartowski/google_gemma-4-31B-it-GGUF"
 
 	// DefaultModelFile is the filename of the default GGUF model.
-	DefaultModelFile = "Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf"
+	DefaultModelFile = "google_gemma-4-31B-it-Q4_K_M.gguf"
 
 	// DefaultModelURL is the direct download URL for the default model.
-	DefaultModelURL = "https://huggingface.co/bartowski/Qwen2.5-Coder-32B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf"
+	DefaultModelURL = "https://huggingface.co/bartowski/google_gemma-4-31B-it-GGUF/resolve/main/google_gemma-4-31B-it-Q4_K_M.gguf"
 
 	// DefaultModelHash is the expected SHA256 hash of the default model file.
-	DefaultModelHash = "8e2fd78ff55e7cdf577fda257bac2776feb7d73d922613caf35468073807e815"
+	DefaultModelHash = "ef78230619509d4e7a9ea127cca9af04bad3f28c59d5cb648df0258fced39d54"
 
-	// DefaultModelSize is the expected file size in bytes (~19.85 GB).
-	DefaultModelSize = int64(19_900_000_000)
+	// DefaultModelSize is the expected file size in bytes (~19.60 GB).
+	DefaultModelSize = int64(19_598_483_328)
 
 	// DefaultModelName is the human-readable name of the default model.
-	DefaultModelName = "Qwen2.5-Coder-32B-Q4_K_M"
+	DefaultModelName = "Gemma-4-31B-Q4_K_M"
 )
 
 // ModelConfig holds user configuration overrides loaded from config.json.
@@ -199,11 +199,11 @@ func (c *ModelConfig) EffectiveLogBufferMax() int {
 	return c.LogBufferMax
 }
 
-// EffectiveGPUComputePct returns the configured GPU compute percentage or 100.
+// EffectiveGPUComputePct returns the configured GPU compute percentage or 80.
 // Clamps to the range [10, 100].
 func (c *ModelConfig) EffectiveGPUComputePct() int {
 	if c.GPUComputePct == 0 {
-		return 100
+		return 80
 	}
 	if c.GPUComputePct < 10 {
 		return 10

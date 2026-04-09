@@ -12,7 +12,7 @@ import (
 )
 
 func TestDefaultConstants(t *testing.T) {
-	assert.Contains(t, DefaultModelURL, "bartowski/Qwen2.5-Coder-32B-Instruct-GGUF")
+	assert.Contains(t, DefaultModelURL, "bartowski/google_gemma-4-31B-it-GGUF")
 	assert.True(t, strings.HasSuffix(DefaultModelFile, ".gguf"))
 	assert.Greater(t, DefaultModelSize, int64(0))
 	assert.Len(t, DefaultModelHash, 64, "SHA256 hash should be 64 hex characters")
@@ -187,7 +187,7 @@ func TestAllEffectiveDefaults(t *testing.T) {
 	assert.Equal(t, 10, cfg.EffectiveMaxIterations())
 
 	// GPU compute throttling
-	assert.Equal(t, 100, cfg.EffectiveGPUComputePct())
+	assert.Equal(t, 80, cfg.EffectiveGPUComputePct())
 }
 
 // TestLoadConfigAllFields writes a JSON with all fields set to non-default values,
@@ -449,7 +449,7 @@ func TestConfigSampleIsValidAndComplete(t *testing.T) {
 
 func TestEffectiveGPUComputePctDefault(t *testing.T) {
 	cfg := &ModelConfig{}
-	assert.Equal(t, 100, cfg.EffectiveGPUComputePct())
+	assert.Equal(t, 80, cfg.EffectiveGPUComputePct())
 }
 
 func TestEffectiveGPUComputePctCustom(t *testing.T) {
