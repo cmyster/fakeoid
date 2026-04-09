@@ -294,6 +294,139 @@ func TestBuildCmdNoCUMaskZeroCUs(t *testing.T) {
 	assert.Nil(t, cmd.Env, "cmd.Env should be nil when TotalCUs is 0 (unknown)")
 }
 
+func TestBuildCmdWithGPUMaxAllocPct(t *testing.T) {
+	cfg := ServerConfig{
+		LlamaServerPath: "/usr/bin/llama-server",
+		ModelPath:        "/models/test.gguf",
+		Port:             8080,
+		CtxSize:          8192,
+		GPUMaxAllocPct:   80,
+	}
+	s := NewServer(cfg)
+	cmd := s.BuildCmd()
+
+	require.NotNil(t, cmd.Env)
+	found := false
+	for _, env := range cmd.Env {
+		if env == "GPU_MAX_ALLOC_PERCENT=80" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "GPU_MAX_ALLOC_PERCENT=80 should be in cmd.Env")
+}
+
+func TestBuildCmdNoGPUMaxAllocPctDefault(t *testing.T) {
+	cfg := ServerConfig{
+		LlamaServerPath: "/usr/bin/llama-server",
+		ModelPath:        "/models/test.gguf",
+		Port:             8080,
+		CtxSize:          8192,
+		GPUMaxAllocPct:   0,
+	}
+	s := NewServer(cfg)
+	cmd := s.BuildCmd()
+	// No custom env when GPUMaxAllocPct is 0 (default)
+	for _, env := range cmd.Env {
+		assert.NotContains(t, env, "GPU_MAX_ALLOC_PERCENT", "should not inject GPU_MAX_ALLOC_PERCENT when 0")
+	}
+}
+
+func TestBuildCmdNoGPUMaxAllocPctAt100(t *testing.T) {
+	cfg := ServerConfig{
+		LlamaServerPath: "/usr/bin/llama-server",
+		ModelPath:        "/models/test.gguf",
+		Port:             8080,
+		CtxSize:          8192,
+		GPUMaxAllocPct:   100,
+	}
+	s := NewServer(cfg)
+	cmd := s.BuildCmd()
+	for _, env := range cmd.Env {
+		assert.NotContains(t, env, "GPU_MAX_ALLOC_PERCENT", "should not inject GPU_MAX_ALLOC_PERCENT at 100")
+	}
+}
+
+func TestBuildCmdBothEnvVars(t *testing.T) {
+	cfg := ServerConfig{
+		LlamaServerPath: "/usr/bin/llama-server",
+		ModelPath:        "/models/test.gguf",
+		Port:             8080,
+		CtxSize:          8192,
+		GPUComputePct:    75,
+		TotalCUs:         96,
+		GPUMaxAllocPct:   80,
+	}
+	s := NewServer(cfg)
+	cmd := s.BuildCmd()
+
+	require.NotNil(t, cmd.Env)
+	foundCUMask := false
+	foundAllocPct := false
+	for _, env := range cmd.Env {
+		if env == "HSA_CU_MASK=0:0-71" {
+			foundCUMask = true
+		}
+		if env == "GPU_MAX_ALLOC_PERCENT=80" {
+			foundAllocPct = true
+		}
+	}
+	assert.True(t, foundCUMask, "HSA_CU_MASK=0:0-71 should be in cmd.Env")
+	assert.True(t, foundAllocPct, "GPU_MAX_ALLOC_PERCENT=80 should be in cmd.Env")
+}
+
+func TestBuildCmdAutoGPULayers(t *testing.T) {
+	cfg := ServerConfig{
+		LlamaServerPath: "/usr/bin/llama-server",
+		ModelPath:        "/models/test.gguf",
+		Port:             8080,
+		CtxSize:          8192,
+		GPULayers:        "",
+		VRAMSizeKB:       16777216, // 16GB
+		ModelFileSize:    19_900_000_000,
+	}
+	s := NewServer(cfg)
+	cmd := s.BuildCmd()
+
+	args := strings.Join(cmd.Args[1:], " ")
+	assert.NotContains(t, args, "--n-gpu-layers 999", "16GB VRAM should auto-calc fewer than 999 layers")
+	assert.Contains(t, args, "--n-gpu-layers", "should still have --n-gpu-layers arg")
+}
+
+func TestBuildCmdAutoGPULayersFallback(t *testing.T) {
+	cfg := ServerConfig{
+		LlamaServerPath: "/usr/bin/llama-server",
+		ModelPath:        "/models/test.gguf",
+		Port:             8080,
+		CtxSize:          8192,
+		GPULayers:        "",
+		VRAMSizeKB:       0,
+		ModelFileSize:    19_900_000_000,
+	}
+	s := NewServer(cfg)
+	cmd := s.BuildCmd()
+
+	args := strings.Join(cmd.Args[1:], " ")
+	assert.Contains(t, args, "--n-gpu-layers 999", "should fallback to 999 when VRAM unknown")
+}
+
+func TestBuildCmdGPULayersUserOverride(t *testing.T) {
+	cfg := ServerConfig{
+		LlamaServerPath: "/usr/bin/llama-server",
+		ModelPath:        "/models/test.gguf",
+		Port:             8080,
+		CtxSize:          8192,
+		GPULayers:        "30",
+		VRAMSizeKB:       16777216,
+		ModelFileSize:    19_900_000_000,
+	}
+	s := NewServer(cfg)
+	cmd := s.BuildCmd()
+
+	args := strings.Join(cmd.Args[1:], " ")
+	assert.Contains(t, args, "--n-gpu-layers 30", "user override should take priority over auto-calc")
+}
+
 func TestShutdownSIGTERM(t *testing.T) {
 	// Use a real subprocess (sleep) to test Stop
 	cmd := exec.Command("sleep", "60")

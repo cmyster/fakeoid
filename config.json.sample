@@ -5,17 +5,17 @@
 {
   // --- Model Identity ---
   // HuggingFace repository for the model
-  "model_repo": "bartowski/google_gemma-4-31B-it-GGUF",
+  "model_repo": "bartowski/Qwen2.5-Coder-32B-Instruct-GGUF",
   // GGUF filename within the repository
-  "model_file": "google_gemma-4-31B-it-Q4_K_M.gguf",
+  "model_file": "Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf",
   // Direct download URL for the model
-  "model_url": "https://huggingface.co/bartowski/google_gemma-4-31B-it-GGUF/resolve/main/google_gemma-4-31B-it-Q4_K_M.gguf",
+  "model_url": "https://huggingface.co/bartowski/Qwen2.5-Coder-32B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf",
   // Expected SHA256 hash for integrity verification
-  "model_hash": "ef78230619509d4e7a9ea127cca9af04bad3f28c59d5cb648df0258fced39d54",
-  // Expected file size in bytes (~19.60 GB)
-  "model_size": 19598483328,
+  "model_hash": "8e2fd78ff55e7cdf577fda257bac2776feb7d73d922613caf35468073807e815",
+  // Expected file size in bytes (~19.85 GB)
+  "model_size": 19900000000,
   // Human-readable model name shown in the shell banner
-  "model_name": "Gemma-4-31B-Q4_K_M",
+  "model_name": "Qwen2.5-Coder-32B-Q4_K_M",
   // Override the full path to the cached model file (default: ~/.fakeoid/models/<model_file>)
   "model_path": "",
 
@@ -24,7 +24,7 @@
   "port": 8080,
   // Context window size in tokens
   "ctx_size": 16384,
-  // Number of GPU layers to offload ("999" = all)
+  // Number of GPU layers to offload (empty or "999" = auto-detect from VRAM, or set manually)
   "gpu_layers": "999",
   // Flash attention mode ("on" or "off")
   "flash_attn": "on",
@@ -33,7 +33,9 @@
   // Maximum lines kept in the server log buffer
   "log_buffer_max": 200,
   // Percentage of GPU compute units to use (10-100, default 100 = all CUs)
-  "gpu_compute_pct": 80,
+  "gpu_compute_pct": 100,
+  // Maximum percentage of GPU VRAM allocatable per request (OpenCL only, 10-100, default 100 = all)
+  "gpu_max_alloc_pct": 100,
 
   // --- Timeouts ---
   // Seconds to wait after SIGTERM before sending SIGKILL

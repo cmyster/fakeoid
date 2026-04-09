@@ -55,9 +55,11 @@ var rootCmd = &cobra.Command{
 		// Cache GPU name and CU count for shell banner and compute throttling
 		gpuName = "unknown"
 		var totalCUs int
+		var vramSizeKB uint64
 		if gpuResult, gpus, _ := validate.CheckGPU(&validate.ExecRunner{}, false); gpuResult != nil && gpuResult.Passed && len(gpus) > 0 {
 			gpuName = gpus[0].Name
 			totalCUs = gpus[0].ComputeUnits
+			vramSizeKB = gpus[0].VRAMSizeKB
 		}
 
 		// Auto-download model if not cached
@@ -92,15 +94,18 @@ var rootCmd = &cobra.Command{
 			ModelPath:       modelPath,
 			Port:            cfg.EffectivePort(),
 			CtxSize:         cfg.EffectiveCtxSize(),
-			GPULayers:       cfg.EffectiveGPULayers(),
+			GPULayers:       cfg.GPULayers,
 			FlashAttn:       cfg.EffectiveFlashAttn(),
 			Host:            cfg.EffectiveHost(),
 			LogBufferMax:    cfg.EffectiveLogBufferMax(),
 			KillTimeoutSec:  cfg.EffectiveKillTimeoutSec(),
 			HealthPollMs:    cfg.EffectiveHealthPollMs(),
 			HealthTimeoutMs: cfg.EffectiveHealthTimeoutMs(),
-			GPUComputePct:   cfg.EffectiveGPUComputePct(),
-			TotalCUs:        totalCUs,
+			GPUComputePct:  cfg.EffectiveGPUComputePct(),
+			TotalCUs:       totalCUs,
+			GPUMaxAllocPct: cfg.EffectiveGPUMaxAllocPct(),
+			VRAMSizeKB:     vramSizeKB,
+			ModelFileSize:  cfg.EffectiveModelSize(),
 		})
 
 		startupTimeout := time.Duration(cfg.EffectiveStartupTimeoutSec()) * time.Second

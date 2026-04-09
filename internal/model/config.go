@@ -3,28 +3,30 @@ package model
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 const (
 	// DefaultModelRepo is the HuggingFace repository for the default model.
-	DefaultModelRepo = "bartowski/google_gemma-4-31B-it-GGUF"
+	DefaultModelRepo = "bartowski/Qwen2.5-Coder-32B-Instruct-GGUF"
 
 	// DefaultModelFile is the filename of the default GGUF model.
-	DefaultModelFile = "google_gemma-4-31B-it-Q4_K_M.gguf"
+	DefaultModelFile = "Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf"
 
 	// DefaultModelURL is the direct download URL for the default model.
-	DefaultModelURL = "https://huggingface.co/bartowski/google_gemma-4-31B-it-GGUF/resolve/main/google_gemma-4-31B-it-Q4_K_M.gguf"
+	DefaultModelURL = "https://huggingface.co/bartowski/Qwen2.5-Coder-32B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf"
 
 	// DefaultModelHash is the expected SHA256 hash of the default model file.
-	DefaultModelHash = "ef78230619509d4e7a9ea127cca9af04bad3f28c59d5cb648df0258fced39d54"
+	DefaultModelHash = "8e2fd78ff55e7cdf577fda257bac2776feb7d73d922613caf35468073807e815"
 
-	// DefaultModelSize is the expected file size in bytes (~19.60 GB).
-	DefaultModelSize = int64(19_598_483_328)
+	// DefaultModelSize is the expected file size in bytes (~19.85 GB).
+	DefaultModelSize = int64(19_900_000_000)
 
 	// DefaultModelName is the human-readable name of the default model.
-	DefaultModelName = "Gemma-4-31B-Q4_K_M"
+	DefaultModelName = "Qwen2.5-Coder-32B-Q4_K_M"
 )
 
 // ModelConfig holds user configuration overrides loaded from config.json.
@@ -48,7 +50,8 @@ type ModelConfig struct {
 	FlashAttn     string `json:"flash_attn"`
 	Host          string `json:"host"`
 	LogBufferMax  int    `json:"log_buffer_max"`
-	GPUComputePct int    `json:"gpu_compute_pct"`
+	GPUComputePct  int    `json:"gpu_compute_pct"`
+	GPUMaxAllocPct int    `json:"gpu_max_alloc_pct"`
 
 	// Timeouts
 	KillTimeoutSec    int `json:"kill_timeout_seconds"`
@@ -199,11 +202,11 @@ func (c *ModelConfig) EffectiveLogBufferMax() int {
 	return c.LogBufferMax
 }
 
-// EffectiveGPUComputePct returns the configured GPU compute percentage or 80.
+// EffectiveGPUComputePct returns the configured GPU compute percentage or 100.
 // Clamps to the range [10, 100].
 func (c *ModelConfig) EffectiveGPUComputePct() int {
 	if c.GPUComputePct == 0 {
-		return 80
+		return 100
 	}
 	if c.GPUComputePct < 10 {
 		return 10
@@ -212,6 +215,50 @@ func (c *ModelConfig) EffectiveGPUComputePct() int {
 		return 100
 	}
 	return c.GPUComputePct
+}
+
+// EffectiveGPUMaxAllocPct returns the configured GPU max allocation percentage or 100.
+// Clamps to the range [10, 100].
+func (c *ModelConfig) EffectiveGPUMaxAllocPct() int {
+	if c.GPUMaxAllocPct == 0 {
+		return 100
+	}
+	if c.GPUMaxAllocPct < 10 {
+		return 10
+	}
+	if c.GPUMaxAllocPct > 100 {
+		return 100
+	}
+	return c.GPUMaxAllocPct
+}
+
+// CalcAutoGPULayers calculates the number of GPU layers to offload based on
+// available VRAM and model file size. Returns "999" (all layers) when the model
+// fits with headroom, a reduced count when it doesn't, or "999" as fallback
+// when VRAM info is unavailable.
+func CalcAutoGPULayers(vramSizeKB uint64, modelFileSize int64) string {
+	if vramSizeKB == 0 || modelFileSize <= 0 {
+		return "999"
+	}
+
+	availGB := float64(vramSizeKB) / 1024.0 / 1024.0
+	modelGB := float64(modelFileSize) / (1024.0 * 1024.0 * 1024.0)
+	headroomGB := 5.0 // KV cache + SWA cache + runtime overhead
+	usableGB := availGB - headroomGB
+
+	if usableGB <= 0 {
+		return "1"
+	}
+
+	if modelGB <= usableGB {
+		return "999"
+	}
+
+	safeLayers := int(math.Floor(999.0 * usableGB / modelGB))
+	if safeLayers < 1 {
+		safeLayers = 1
+	}
+	return strconv.Itoa(safeLayers)
 }
 
 // EffectiveKillTimeoutSec returns the configured kill timeout or 5 seconds.

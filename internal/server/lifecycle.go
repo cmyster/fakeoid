@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+
+	"github.com/cmyster/fakeoid/internal/model"
 )
 
 // ServerConfig holds the configuration for starting a llama-server subprocess.
@@ -24,8 +26,11 @@ type ServerConfig struct {
 	KillTimeoutSec  int
 	HealthPollMs    int
 	HealthTimeoutMs int
-	GPUComputePct   int
-	TotalCUs        int
+	GPUComputePct  int
+	TotalCUs       int
+	GPUMaxAllocPct int
+	VRAMSizeKB     uint64
+	ModelFileSize  int64
 }
 
 // Server manages a llama-server subprocess.
@@ -70,7 +75,7 @@ func NewServer(cfg ServerConfig) *Server {
 func (s *Server) BuildCmd() *exec.Cmd {
 	gpuLayers := s.cfg.GPULayers
 	if gpuLayers == "" {
-		gpuLayers = "999"
+		gpuLayers = model.CalcAutoGPULayers(s.cfg.VRAMSizeKB, s.cfg.ModelFileSize)
 	}
 	flashAttn := s.cfg.FlashAttn
 	if flashAttn == "" {
@@ -90,9 +95,17 @@ func (s *Server) BuildCmd() *exec.Cmd {
 	)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-	// Inject HSA_CU_MASK to limit GPU compute when configured below 100%
-	if s.cfg.GPUComputePct > 0 && s.cfg.GPUComputePct < 100 && s.cfg.TotalCUs > 0 {
-		cmd.Env = append(os.Environ(), "HSA_CU_MASK="+buildCUMask(s.cfg.GPUComputePct, s.cfg.TotalCUs))
+	// Build custom env if any GPU-related env vars need injection
+	needCUMask := s.cfg.GPUComputePct > 0 && s.cfg.GPUComputePct < 100 && s.cfg.TotalCUs > 0
+	needAllocPct := s.cfg.GPUMaxAllocPct > 0 && s.cfg.GPUMaxAllocPct < 100
+	if needCUMask || needAllocPct {
+		cmd.Env = os.Environ()
+		if needCUMask {
+			cmd.Env = append(cmd.Env, "HSA_CU_MASK="+buildCUMask(s.cfg.GPUComputePct, s.cfg.TotalCUs))
+		}
+		if needAllocPct {
+			cmd.Env = append(cmd.Env, fmt.Sprintf("GPU_MAX_ALLOC_PERCENT=%d", s.cfg.GPUMaxAllocPct))
+		}
 	}
 
 	cmd.Stderr = s.logBuffer
