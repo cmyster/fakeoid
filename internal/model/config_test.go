@@ -81,7 +81,7 @@ func TestEffectivePortCustom(t *testing.T) {
 
 func TestEffectiveCtxSizeDefault(t *testing.T) {
 	cfg := &ModelConfig{}
-	assert.Equal(t, 16384, cfg.EffectiveCtxSize())
+	assert.Equal(t, 8192, cfg.EffectiveCtxSize())
 }
 
 func TestEffectiveCtxSizeCustom(t *testing.T) {
@@ -118,7 +118,7 @@ func TestLoadConfigBackwardCompatible(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "/old/model.gguf", cfg.ModelPath)
 	assert.Equal(t, 8080, cfg.EffectivePort())
-	assert.Equal(t, 16384, cfg.EffectiveCtxSize())
+	assert.Equal(t, 8192, cfg.EffectiveCtxSize())
 }
 
 // TestAllEffectiveDefaults verifies every Effective* method returns the correct
@@ -128,7 +128,7 @@ func TestAllEffectiveDefaults(t *testing.T) {
 
 	// Existing fields
 	assert.Equal(t, 8080, cfg.EffectivePort())
-	assert.Equal(t, 16384, cfg.EffectiveCtxSize())
+	assert.Equal(t, 8192, cfg.EffectiveCtxSize())
 
 	// Model identity
 	assert.Equal(t, DefaultModelRepo, cfg.EffectiveModelRepo())
@@ -188,10 +188,10 @@ func TestAllEffectiveDefaults(t *testing.T) {
 	assert.Equal(t, 10, cfg.EffectiveMaxIterations())
 
 	// GPU compute throttling
-	assert.Equal(t, 100, cfg.EffectiveGPUComputePct())
+	assert.Equal(t, 60, cfg.EffectiveGPUComputePct())
 
 	// GPU VRAM allocation
-	assert.Equal(t, 100, cfg.EffectiveGPUMaxAllocPct())
+	assert.Equal(t, 90, cfg.EffectiveGPUMaxAllocPct())
 }
 
 // TestLoadConfigAllFields writes a JSON with all fields set to non-default values,
@@ -459,7 +459,7 @@ func TestConfigSampleIsValidAndComplete(t *testing.T) {
 
 func TestEffectiveGPUComputePctDefault(t *testing.T) {
 	cfg := &ModelConfig{}
-	assert.Equal(t, 100, cfg.EffectiveGPUComputePct())
+	assert.Equal(t, 60, cfg.EffectiveGPUComputePct())
 }
 
 func TestEffectiveGPUComputePctCustom(t *testing.T) {
@@ -479,7 +479,7 @@ func TestEffectiveGPUComputePctCap(t *testing.T) {
 
 func TestEffectiveGPUMaxAllocPctDefault(t *testing.T) {
 	cfg := &ModelConfig{}
-	assert.Equal(t, 100, cfg.EffectiveGPUMaxAllocPct())
+	assert.Equal(t, 90, cfg.EffectiveGPUMaxAllocPct())
 }
 
 func TestEffectiveGPUMaxAllocPctCustom(t *testing.T) {
@@ -505,11 +505,14 @@ func TestCalcAutoGPULayers(t *testing.T) {
 		check     func(t *testing.T, result string)
 	}{
 		{
-			name:      "24GB VRAM with DefaultModelSize fits all layers",
+			name:      "24GB VRAM with DefaultModelSize does not fit all layers (8GB headroom)",
 			vramKB:    25149440,
 			modelSize: DefaultModelSize,
 			check: func(t *testing.T, result string) {
-				assert.Equal(t, "999", result, "24GB VRAM should fit ~18.5GB model with 5GB headroom")
+				val, err := strconv.Atoi(result)
+				require.NoError(t, err)
+				assert.Less(t, val, 999, "24GB VRAM should not fit all layers with 8GB headroom")
+				assert.Greater(t, val, 0, "should have at least 1 layer")
 			},
 		},
 		{

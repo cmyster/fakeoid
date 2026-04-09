@@ -56,7 +56,7 @@ func NewServer(cfg ServerConfig) *Server {
 	}
 	ctxSize := cfg.CtxSize
 	if ctxSize == 0 {
-		ctxSize = 16384
+		ctxSize = 8192
 	}
 	logBufMax := cfg.LogBufferMax
 	if logBufMax == 0 {

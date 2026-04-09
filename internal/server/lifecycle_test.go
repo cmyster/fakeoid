@@ -47,7 +47,7 @@ func TestNewServerDefaultCtxSize(t *testing.T) {
 		ModelPath:        "/models/test.gguf",
 	}
 	s := NewServer(cfg)
-	assert.Equal(t, 16384, s.ctxSize)
+	assert.Equal(t, 8192, s.ctxSize)
 }
 
 func TestLifecycleBuildCmd(t *testing.T) {

@@ -106,10 +106,10 @@ func (c *ModelConfig) EffectivePort() int {
 	return c.Port
 }
 
-// EffectiveCtxSize returns the configured context size, or 16384 if not set.
+// EffectiveCtxSize returns the configured context size, or 8192 if not set.
 func (c *ModelConfig) EffectiveCtxSize() int {
 	if c.CtxSize == 0 {
-		return 16384
+		return 8192
 	}
 	return c.CtxSize
 }
@@ -202,11 +202,11 @@ func (c *ModelConfig) EffectiveLogBufferMax() int {
 	return c.LogBufferMax
 }
 
-// EffectiveGPUComputePct returns the configured GPU compute percentage or 100.
+// EffectiveGPUComputePct returns the configured GPU compute percentage or 60.
 // Clamps to the range [10, 100].
 func (c *ModelConfig) EffectiveGPUComputePct() int {
 	if c.GPUComputePct == 0 {
-		return 100
+		return 60
 	}
 	if c.GPUComputePct < 10 {
 		return 10
@@ -217,11 +217,11 @@ func (c *ModelConfig) EffectiveGPUComputePct() int {
 	return c.GPUComputePct
 }
 
-// EffectiveGPUMaxAllocPct returns the configured GPU max allocation percentage or 100.
+// EffectiveGPUMaxAllocPct returns the configured GPU max allocation percentage or 90.
 // Clamps to the range [10, 100].
 func (c *ModelConfig) EffectiveGPUMaxAllocPct() int {
 	if c.GPUMaxAllocPct == 0 {
-		return 100
+		return 90
 	}
 	if c.GPUMaxAllocPct < 10 {
 		return 10
@@ -243,7 +243,7 @@ func CalcAutoGPULayers(vramSizeKB uint64, modelFileSize int64) string {
 
 	availGB := float64(vramSizeKB) / 1024.0 / 1024.0
 	modelGB := float64(modelFileSize) / (1024.0 * 1024.0 * 1024.0)
-	headroomGB := 5.0 // KV cache + SWA cache + runtime overhead
+	headroomGB := 8.0 // KV cache + SWA cache + runtime overhead + desktop compositor
 	usableGB := availGB - headroomGB
 
 	if usableGB <= 0 {
