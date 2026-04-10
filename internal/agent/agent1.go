@@ -121,3 +121,8 @@ func (a *Agent1) State() agent1State {
 func (a *Agent1) IsConfirming() bool {
 	return a.state == stateConfirming
 }
+
+// IsGathering returns true if the agent is in the initial task-gathering state.
+func (a *Agent1) IsGathering() bool {
+	return a.state == stateGathering
+}

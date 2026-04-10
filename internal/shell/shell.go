@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/chzyer/readline"
 	"github.com/cmyster/fakeoid/internal/agent"
+	"golang.org/x/term"
 	"github.com/cmyster/fakeoid/internal/extract"
 	"github.com/cmyster/fakeoid/internal/sandbox"
 	"github.com/cmyster/fakeoid/internal/server"
@@ -380,6 +382,108 @@ func (s *Shell) readMultiLine() (string, error) {
 	return strings.Join(lines, "\n"), nil
 }
 
+// readPasteAware reads input with bracketed paste mode enabled.
+// When the terminal wraps pasted text in ESC[200~...ESC[201~, embedded newlines
+// are accumulated rather than triggering submission. Only a bare keyboard Enter
+// (outside a paste bracket) submits the input.
+//
+// Falls back to s.rl.Readline() if stdin is not a TTY (tests, pipes).
+func (s *Shell) readPasteAware() (string, error) {
+	fd := int(os.Stdin.Fd())
+	if !term.IsTerminal(fd) {
+		return s.rl.Readline()
+	}
+
+	oldState, err := term.MakeRaw(fd)
+	if err != nil {
+		return s.rl.Readline()
+	}
+	defer term.Restore(fd, oldState)
+
+	// Enable bracketed paste mode; disable on return.
+	fmt.Fprint(os.Stdout, "\x1b[?2004h")
+	defer fmt.Fprint(os.Stdout, "\x1b[?2004l")
+
+	// Print the prompt manually (readline is not driving output in raw mode).
+	fmt.Fprint(os.Stdout, ColorPrompt.Sprint("fakeoid> "))
+
+	var buf strings.Builder
+	var inPaste bool
+	reader := bufio.NewReader(os.Stdin)
+
+	for {
+		b, readErr := reader.ReadByte()
+		if readErr != nil {
+			return buf.String(), readErr
+		}
+
+		switch {
+		case b == 0x03: // Ctrl+C
+			fmt.Fprint(os.Stdout, "\r\n")
+			return "", readline.ErrInterrupt
+
+		case b == 0x04: // Ctrl+D / EOF
+			fmt.Fprint(os.Stdout, "\r\n")
+			if buf.Len() == 0 {
+				return "", io.EOF
+			}
+			return strings.TrimSpace(buf.String()), nil
+
+		case b == 0x7f || b == 0x08: // Backspace / DEL
+			str := buf.String()
+			if len(str) > 0 {
+				runes := []rune(str)
+				buf.Reset()
+				buf.WriteString(string(runes[:len(runes)-1]))
+				fmt.Fprint(os.Stdout, "\b \b")
+			}
+
+		case b == 0x1b: // ESC — peek for bracketed paste sequences
+			seq := s.readEscapeSeq(reader)
+			switch seq {
+			case "[200~":
+				inPaste = true
+			case "[201~":
+				inPaste = false
+			}
+
+		case b == '\r' || b == '\n':
+			if inPaste {
+				// Pasted newline — accumulate, do not submit
+				buf.WriteByte('\n')
+				fmt.Fprint(os.Stdout, "\r\n")
+			} else {
+				// Keyboard Enter — submit
+				fmt.Fprint(os.Stdout, "\r\n")
+				return strings.TrimSpace(buf.String()), nil
+			}
+
+		default:
+			buf.WriteByte(b)
+			fmt.Fprintf(os.Stdout, "%c", rune(b))
+		}
+	}
+}
+
+// readEscapeSeq reads an ANSI escape sequence from r after the leading ESC byte
+// has already been consumed. Reads until a letter or '~' terminates the sequence.
+// Returns the sequence without the leading ESC (e.g. "[200~" for bracketed paste start).
+func (s *Shell) readEscapeSeq(r *bufio.Reader) string {
+	var seq strings.Builder
+	for {
+		b, err := r.ReadByte()
+		if err != nil {
+			break
+		}
+		seq.WriteByte(b)
+		// Sequences end at a letter (A-Z, a-z) or '~'
+		if (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || b == '~' {
+			break
+		}
+	}
+	return seq.String()
+}
+
 // getHistory returns the conversation history, using the runner if available.
 func (s *Shell) getHistory() []server.Message {
 	if s.runner != nil {
@@ -442,7 +546,17 @@ func (s *Shell) Run(ctx context.Context) error {
 			return nil
 		}
 
-		input, err := s.readMultiLine()
+		var input string
+		var err error
+		if s.runner != nil {
+			if a1, ok := s.runner.Active().(*agent.Agent1); ok && a1.IsGathering() {
+				input, err = s.readPasteAware()
+			} else {
+				input, err = s.readMultiLine()
+			}
+		} else {
+			input, err = s.readMultiLine()
+		}
 		if err == readline.ErrInterrupt {
 			return nil
 		}
