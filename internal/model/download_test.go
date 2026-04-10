@@ -46,7 +46,7 @@ func TestDownloadFreshFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	destPath := filepath.Join(tmpDir, "model.gguf")
 
-	err := Download(server.URL, destPath, int64(len(content)), io.Discard, true)
+	err := Download(server.URL, destPath, int64(len(content)), "", io.Discard)
 	assert.NoError(t, err)
 
 	data, err := os.ReadFile(destPath)
@@ -70,7 +70,7 @@ func TestDownloadResume(t *testing.T) {
 	// Create a .part file with first 10 bytes
 	require.NoError(t, os.WriteFile(partPath, []byte(content[:10]), 0644))
 
-	err := Download(server.URL, destPath, int64(len(content)), io.Discard, true)
+	err := Download(server.URL, destPath, int64(len(content)), "", io.Discard)
 	assert.NoError(t, err)
 
 	data, err := os.ReadFile(destPath)
@@ -95,7 +95,7 @@ func TestDownloadServerResetOnResume(t *testing.T) {
 	// Create partial .part file
 	require.NoError(t, os.WriteFile(partPath, []byte("old partial data"), 0644))
 
-	err := Download(server.URL, destPath, int64(len(content)), io.Discard, true)
+	err := Download(server.URL, destPath, int64(len(content)), "", io.Discard)
 	assert.NoError(t, err)
 
 	data, err := os.ReadFile(destPath)
@@ -111,7 +111,7 @@ func TestDownloadNetworkError(t *testing.T) {
 	// Create .part file to verify it is preserved
 	require.NoError(t, os.WriteFile(partPath, []byte("partial data"), 0644))
 
-	err := Download("http://127.0.0.1:1", destPath, 1000, io.Discard, true)
+	err := Download("http://127.0.0.1:1", destPath, 1000, "", io.Discard)
 	assert.Error(t, err)
 
 	// .part file should be preserved
@@ -128,7 +128,7 @@ func TestDownloadHTTPError(t *testing.T) {
 	tmpDir := t.TempDir()
 	destPath := filepath.Join(tmpDir, "model.gguf")
 
-	err := Download(server.URL, destPath, 1000, io.Discard, true)
+	err := Download(server.URL, destPath, 1000, "", io.Discard)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "404")
 }

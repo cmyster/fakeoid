@@ -9,25 +9,6 @@ import (
 	"strconv"
 )
 
-const (
-	// DefaultModelRepo is the HuggingFace repository for the default model.
-	DefaultModelRepo = "bartowski/Qwen2.5-Coder-32B-Instruct-GGUF"
-
-	// DefaultModelFile is the filename of the default GGUF model.
-	DefaultModelFile = "Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf"
-
-	// DefaultModelURL is the direct download URL for the default model.
-	DefaultModelURL = "https://huggingface.co/bartowski/Qwen2.5-Coder-32B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf"
-
-	// DefaultModelHash is the expected SHA256 hash of the default model file.
-	DefaultModelHash = "8e2fd78ff55e7cdf577fda257bac2776feb7d73d922613caf35468073807e815"
-
-	// DefaultModelSize is the expected file size in bytes (~19.85 GB).
-	DefaultModelSize = int64(19_900_000_000)
-
-	// DefaultModelName is the human-readable name of the default model.
-	DefaultModelName = "Qwen2.5-Coder-32B-Q4_K_M"
-)
 
 // ModelConfig holds user configuration overrides loaded from config.json.
 // Zero-value fields use hardcoded defaults via Effective* methods.
@@ -114,60 +95,61 @@ func (c *ModelConfig) EffectiveCtxSize() int {
 	return c.CtxSize
 }
 
-// EffectiveModelRepo returns the configured model repo or the default.
+// EffectiveModelRepo returns the configured model repo.
 func (c *ModelConfig) EffectiveModelRepo() string {
-	if c.ModelRepo == "" {
-		return DefaultModelRepo
-	}
 	return c.ModelRepo
 }
 
-// EffectiveModelFile returns the configured model file or the default.
+// EffectiveModelFile returns the configured model file.
 func (c *ModelConfig) EffectiveModelFile() string {
-	if c.ModelFile == "" {
-		return DefaultModelFile
-	}
 	return c.ModelFile
 }
 
-// EffectiveModelURL returns the configured model URL or the default.
+// EffectiveModelURL returns the configured model URL.
 func (c *ModelConfig) EffectiveModelURL() string {
-	if c.ModelURL == "" {
-		return DefaultModelURL
-	}
 	return c.ModelURL
 }
 
-// EffectiveModelHash returns the configured model hash or the default.
+// EffectiveModelHash returns the configured model hash (empty means skip verification).
 func (c *ModelConfig) EffectiveModelHash() string {
-	if c.ModelHash == "" {
-		return DefaultModelHash
-	}
 	return c.ModelHash
 }
 
-// EffectiveModelSize returns the configured model size or the default.
+// EffectiveModelSize returns the configured model size in bytes.
 func (c *ModelConfig) EffectiveModelSize() int64 {
-	if c.ModelSize == 0 {
-		return DefaultModelSize
-	}
 	return c.ModelSize
 }
 
-// EffectiveModelName returns the configured model name or the default.
+// EffectiveModelName returns the configured model name.
 func (c *ModelConfig) EffectiveModelName() string {
-	if c.ModelName == "" {
-		return DefaultModelName
-	}
 	return c.ModelName
 }
 
-// EffectiveModelPath returns the configured model path or the default path.
+// EffectiveModelPath returns the configured model path, or derives it from ModelFile.
 func (c *ModelConfig) EffectiveModelPath() string {
 	if c.ModelPath != "" {
 		return c.ModelPath
 	}
-	return DefaultModelPath()
+	if c.ModelFile != "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			home = "."
+		}
+		return filepath.Join(home, ".fakeoid", "models", c.ModelFile)
+	}
+	return ""
+}
+
+// ValidateModelIdentity returns an error if required model fields are missing.
+// At minimum, model_file and model_name must be set in config.json.
+func (c *ModelConfig) ValidateModelIdentity() error {
+	if c.ModelFile == "" {
+		return errors.New("model_file is required in config.json (e.g. \"google_gemma-4-31B-it-Q4_K_M.gguf\")")
+	}
+	if c.ModelName == "" {
+		return errors.New("model_name is required in config.json (e.g. \"Gemma-4-31B-Q4_K_M\")")
+	}
+	return nil
 }
 
 // EffectiveGPULayers returns the configured GPU layers or "999".
@@ -470,15 +452,6 @@ func (c *ModelConfig) EffectiveMaxIterations() int {
 		return 100
 	}
 	return c.MaxIterations
-}
-
-// DefaultModelPath returns the default filesystem path for the cached model.
-func DefaultModelPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = "."
-	}
-	return filepath.Join(home, ".fakeoid", "models", DefaultModelFile)
 }
 
 // LoadConfig reads the config from the default location (~/.fakeoid/config.json).

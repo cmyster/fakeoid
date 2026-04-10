@@ -43,6 +43,16 @@ var rootCmd = &cobra.Command{
 			return nil
 		}
 
+		// Load config early so model identity is available
+		var cfgErr error
+		cfg, cfgErr = model.LoadConfig()
+		if cfgErr != nil {
+			return fmt.Errorf("loading config: %s", cfgErr)
+		}
+		if err := cfg.ValidateModelIdentity(); err != nil {
+			return fmt.Errorf("config: %s", err)
+		}
+
 		results, err := validate.RunAll(&validate.ExecRunner{}, false)
 		if err != nil {
 			return fmt.Errorf("%s", err)
@@ -63,28 +73,23 @@ var rootCmd = &cobra.Command{
 		}
 
 		// Auto-download model if not cached
-		modelPath := model.DefaultModelPath()
+		modelPath := cfg.EffectiveModelPath()
 		if _, err := os.Stat(modelPath); os.IsNotExist(err) {
-			fmt.Fprintln(os.Stderr, "No model found. Downloading default...")
-			if err := model.DownloadDefault(os.Stderr); err != nil {
+			if cfg.ModelURL == "" {
+				return fmt.Errorf("model not found at %s and model_url not set in config.json for download", modelPath)
+			}
+			fmt.Fprintln(os.Stderr, "No model found. Downloading...")
+			if err := model.DownloadModel(cfg, os.Stderr); err != nil {
 				return fmt.Errorf("%s", err)
 			}
 		}
 
 		// --- Server lifecycle startup ---
 
-		// Load config for all overrides
-		cfg, _ = model.LoadConfig()
-
 		// Resolve llama-server path (already validated by RunAll above)
 		llamaPath, err := exec.LookPath("llama-server")
 		if err != nil {
 			return fmt.Errorf("llama-server not found in PATH")
-		}
-
-		// Resolve model path: config override or default
-		if cfg.ModelPath != "" {
-			modelPath = cfg.ModelPath
 		}
 
 		srvPort = cfg.EffectivePort()

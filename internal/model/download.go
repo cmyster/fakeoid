@@ -14,8 +14,8 @@ import (
 // Download fetches a file from url to destPath with HTTP Range resume support.
 // If a .part file exists, the download resumes from where it left off.
 // The w parameter receives progress output (use os.Stderr in production, io.Discard in tests).
-// If skipVerify is true, SHA256 verification after download is skipped.
-func Download(url, destPath string, expectedSize int64, w io.Writer, skipVerify bool) error {
+// If expectedHash is empty, SHA256 verification is skipped.
+func Download(url, destPath string, expectedSize int64, expectedHash string, w io.Writer) error {
 	partPath := destPath + ".part"
 
 	// Check for existing partial download
@@ -97,9 +97,9 @@ func Download(url, destPath string, expectedSize int64, w io.Writer, skipVerify 
 		return fmt.Errorf("renaming part file: %w", err)
 	}
 
-	// Verify SHA256 after download (unless skipped)
-	if !skipVerify {
-		match, err := VerifySHA256(destPath, DefaultModelHash)
+	// Verify SHA256 after download (skip if hash not configured)
+	if expectedHash != "" {
+		match, err := VerifySHA256(destPath, expectedHash)
 		if err != nil {
 			return fmt.Errorf("verification failed: %w", err)
 		}
@@ -112,13 +112,16 @@ func Download(url, destPath string, expectedSize int64, w io.Writer, skipVerify 
 	return nil
 }
 
-// DownloadDefault downloads the default model to the default cache location.
-func DownloadDefault(w io.Writer) error {
+// DownloadModel downloads the model specified in cfg to the cache location.
+func DownloadModel(cfg *ModelConfig, w io.Writer) error {
+	if cfg.ModelURL == "" {
+		return fmt.Errorf("model_url is required in config.json for download")
+	}
 	_, err := EnsureCacheDir()
 	if err != nil {
 		return err
 	}
-	return Download(DefaultModelURL, DefaultModelPath(), DefaultModelSize, w, false)
+	return Download(cfg.EffectiveModelURL(), cfg.EffectiveModelPath(), cfg.EffectiveModelSize(), cfg.EffectiveModelHash(), w)
 }
 
 // checkDiskSpace warns (but does not fail) if free disk space is insufficient.

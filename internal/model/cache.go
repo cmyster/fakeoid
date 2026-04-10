@@ -24,28 +24,17 @@ func EnsureCacheDirAt(dir string) (string, error) {
 	return dir, nil
 }
 
-// CachedModelInfo checks for a cached model at the default location,
-// respecting config file overrides.
-func CachedModelInfo(configPath string) (name string, sizeBytes int64, exists bool, err error) {
-	return CachedModelInfoAt(DefaultModelPath(), configPath)
+// CachedModelInfo checks for a cached model at the path resolved from cfg.
+func CachedModelInfo(cfg *ModelConfig) (name string, sizeBytes int64, exists bool, err error) {
+	modelPath := cfg.EffectiveModelPath()
+	if modelPath == "" {
+		return "", 0, false, nil
+	}
+	return CachedModelInfoAt(modelPath)
 }
 
-// CachedModelInfoAt checks for a cached model. If configPath is non-empty and
-// the config has a model_path override, that path is checked instead of defaultPath.
-func CachedModelInfoAt(defaultPath, configPath string) (name string, sizeBytes int64, exists bool, err error) {
-	modelPath := defaultPath
-
-	// Check config override
-	if configPath != "" {
-		cfg, cfgErr := LoadConfigFrom(configPath)
-		if cfgErr != nil {
-			return "", 0, false, cfgErr
-		}
-		if cfg.ModelPath != "" {
-			modelPath = cfg.ModelPath
-		}
-	}
-
+// CachedModelInfoAt checks for a cached model at the given path.
+func CachedModelInfoAt(modelPath string) (name string, sizeBytes int64, exists bool, err error) {
 	info, err := os.Stat(modelPath)
 	if err != nil {
 		if os.IsNotExist(err) {

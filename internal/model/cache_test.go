@@ -42,7 +42,7 @@ func TestCachedModelInfoExists(t *testing.T) {
 	content := []byte("fake model content")
 	require.NoError(t, os.WriteFile(modelPath, content, 0644))
 
-	name, size, exists, err := CachedModelInfoAt(modelPath, "")
+	name, size, exists, err := CachedModelInfoAt(modelPath)
 	assert.NoError(t, err)
 	assert.True(t, exists)
 	assert.Equal(t, int64(len(content)), size)
@@ -53,12 +53,12 @@ func TestCachedModelInfoMissing(t *testing.T) {
 	tmpDir := t.TempDir()
 	modelPath := filepath.Join(tmpDir, "nonexistent.gguf")
 
-	_, _, exists, err := CachedModelInfoAt(modelPath, "")
+	_, _, exists, err := CachedModelInfoAt(modelPath)
 	assert.NoError(t, err)
 	assert.False(t, exists)
 }
 
-func TestCachedModelInfoCustomPath(t *testing.T) {
+func TestCachedModelInfoFromConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create custom model file
@@ -66,18 +66,18 @@ func TestCachedModelInfoCustomPath(t *testing.T) {
 	content := []byte("custom model data")
 	require.NoError(t, os.WriteFile(customPath, content, 0644))
 
-	// Create config with model_path override
-	configDir := filepath.Join(tmpDir, "config")
-	require.NoError(t, os.MkdirAll(configDir, 0755))
-	configPath := filepath.Join(configDir, "config.json")
-	require.NoError(t, os.WriteFile(configPath, []byte(`{"model_path":"`+customPath+`"}`), 0644))
+	cfg := &ModelConfig{ModelPath: customPath}
 
-	// Default path does not exist
-	defaultPath := filepath.Join(tmpDir, "default.gguf")
-
-	name, size, exists, err := CachedModelInfoAt(defaultPath, configPath)
+	name, size, exists, err := CachedModelInfo(cfg)
 	assert.NoError(t, err)
 	assert.True(t, exists)
 	assert.Equal(t, int64(len(content)), size)
 	assert.Contains(t, name, "custom-model.gguf")
+}
+
+func TestCachedModelInfoEmptyConfig(t *testing.T) {
+	cfg := &ModelConfig{}
+	_, _, exists, err := CachedModelInfo(cfg)
+	assert.NoError(t, err)
+	assert.False(t, exists)
 }

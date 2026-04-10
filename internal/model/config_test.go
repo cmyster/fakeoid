@@ -12,29 +12,42 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDefaultConstants(t *testing.T) {
-	assert.Contains(t, DefaultModelURL, "bartowski/Qwen2.5-Coder-32B-Instruct-GGUF")
-	assert.True(t, strings.HasSuffix(DefaultModelFile, ".gguf"))
-	assert.Greater(t, DefaultModelSize, int64(0))
-	assert.Len(t, DefaultModelHash, 64, "SHA256 hash should be 64 hex characters")
-
-	// Verify hash is valid hex
-	for _, c := range DefaultModelHash {
-		assert.True(t, (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'),
-			"Hash character '%c' is not valid hex", c)
-	}
-}
-
-func TestDefaultModelPath(t *testing.T) {
-	p := DefaultModelPath()
+func TestEffectiveModelPathFromFile(t *testing.T) {
+	cfg := &ModelConfig{ModelFile: "test-model.gguf"}
+	p := cfg.EffectiveModelPath()
 
 	home, err := os.UserHomeDir()
 	require.NoError(t, err)
 
-	assert.True(t, strings.HasPrefix(p, filepath.Join(home, ".fakeoid", "models")),
-		"Path should be under ~/.fakeoid/models/")
-	assert.True(t, strings.HasSuffix(p, DefaultModelFile),
-		"Path should end with DefaultModelFile")
+	assert.Equal(t, filepath.Join(home, ".fakeoid", "models", "test-model.gguf"), p)
+}
+
+func TestEffectiveModelPathExplicit(t *testing.T) {
+	cfg := &ModelConfig{ModelPath: "/custom/path.gguf", ModelFile: "ignored.gguf"}
+	assert.Equal(t, "/custom/path.gguf", cfg.EffectiveModelPath())
+}
+
+func TestEffectiveModelPathEmpty(t *testing.T) {
+	cfg := &ModelConfig{}
+	assert.Equal(t, "", cfg.EffectiveModelPath())
+}
+
+func TestValidateModelIdentity(t *testing.T) {
+	// Both missing
+	cfg := &ModelConfig{}
+	assert.Error(t, cfg.ValidateModelIdentity())
+
+	// Only file
+	cfg = &ModelConfig{ModelFile: "model.gguf"}
+	assert.Error(t, cfg.ValidateModelIdentity())
+
+	// Only name
+	cfg = &ModelConfig{ModelName: "MyModel"}
+	assert.Error(t, cfg.ValidateModelIdentity())
+
+	// Both set
+	cfg = &ModelConfig{ModelFile: "model.gguf", ModelName: "MyModel"}
+	assert.NoError(t, cfg.ValidateModelIdentity())
 }
 
 func TestLoadConfigNoFile(t *testing.T) {
@@ -130,14 +143,14 @@ func TestAllEffectiveDefaults(t *testing.T) {
 	assert.Equal(t, 8080, cfg.EffectivePort())
 	assert.Equal(t, 8192, cfg.EffectiveCtxSize())
 
-	// Model identity
-	assert.Equal(t, DefaultModelRepo, cfg.EffectiveModelRepo())
-	assert.Equal(t, DefaultModelFile, cfg.EffectiveModelFile())
-	assert.Equal(t, DefaultModelURL, cfg.EffectiveModelURL())
-	assert.Equal(t, DefaultModelHash, cfg.EffectiveModelHash())
-	assert.Equal(t, DefaultModelSize, cfg.EffectiveModelSize())
-	assert.Equal(t, DefaultModelName, cfg.EffectiveModelName())
-	assert.Equal(t, DefaultModelPath(), cfg.EffectiveModelPath())
+	// Model identity (no hardcoded defaults — empty config returns zero values)
+	assert.Equal(t, "", cfg.EffectiveModelRepo())
+	assert.Equal(t, "", cfg.EffectiveModelFile())
+	assert.Equal(t, "", cfg.EffectiveModelURL())
+	assert.Equal(t, "", cfg.EffectiveModelHash())
+	assert.Equal(t, int64(0), cfg.EffectiveModelSize())
+	assert.Equal(t, "", cfg.EffectiveModelName())
+	assert.Equal(t, "", cfg.EffectiveModelPath())
 
 	// Server
 	assert.Equal(t, "999", cfg.EffectiveGPULayers())
@@ -334,8 +347,8 @@ func TestLoadConfigBackwardCompatibleExtended(t *testing.T) {
 	assert.Equal(t, 9090, cfg.EffectivePort())
 	assert.Equal(t, 8192, cfg.EffectiveCtxSize())
 
-	// All new fields use defaults
-	assert.Equal(t, DefaultModelRepo, cfg.EffectiveModelRepo())
+	// Model identity fields are empty (no hardcoded defaults)
+	assert.Equal(t, "", cfg.EffectiveModelRepo())
 	assert.Equal(t, "999", cfg.EffectiveGPULayers())
 	assert.Equal(t, 200, cfg.EffectiveLogBufferMax())
 	assert.Equal(t, 5, cfg.EffectiveKillTimeoutSec())
@@ -386,21 +399,18 @@ func TestConfigSampleIsValidAndComplete(t *testing.T) {
 	var cfg ModelConfig
 	require.NoError(t, json.Unmarshal([]byte(cleaned), &cfg), "sample file should be valid JSON after stripping comments")
 
-	// Verify sample defaults match Effective* defaults from an empty config
+	// Verify sample has required model identity fields set
+	assert.NotEmpty(t, cfg.ModelFile, "model_file must be set in sample")
+	assert.True(t, strings.HasSuffix(cfg.ModelFile, ".gguf"), "model_file should end with .gguf")
+	assert.NotEmpty(t, cfg.ModelName, "model_name must be set in sample")
+	assert.NoError(t, cfg.ValidateModelIdentity(), "sample should pass model validation")
+
+	// Verify sample non-model defaults match Effective* defaults from an empty config
 	empty := &ModelConfig{}
 
 	// Existing fields
 	assert.Equal(t, empty.EffectivePort(), cfg.Port, "port")
 	assert.Equal(t, empty.EffectiveCtxSize(), cfg.CtxSize, "ctx_size")
-	// model_path is empty in sample (user must set it), so skip
-
-	// Model identity
-	assert.Equal(t, empty.EffectiveModelRepo(), cfg.ModelRepo, "model_repo")
-	assert.Equal(t, empty.EffectiveModelFile(), cfg.ModelFile, "model_file")
-	assert.Equal(t, empty.EffectiveModelURL(), cfg.ModelURL, "model_url")
-	assert.Equal(t, empty.EffectiveModelHash(), cfg.ModelHash, "model_hash")
-	assert.Equal(t, empty.EffectiveModelSize(), cfg.ModelSize, "model_size")
-	assert.Equal(t, empty.EffectiveModelName(), cfg.ModelName, "model_name")
 
 	// Server
 	assert.Equal(t, empty.EffectiveGPULayers(), cfg.GPULayers, "gpu_layers")
@@ -505,9 +515,9 @@ func TestCalcAutoGPULayers(t *testing.T) {
 		check     func(t *testing.T, result string)
 	}{
 		{
-			name:      "24GB VRAM with DefaultModelSize does not fit all layers (8GB headroom)",
+			name:      "24GB VRAM with int64(19_900_000_000) does not fit all layers (8GB headroom)",
 			vramKB:    25149440,
-			modelSize: DefaultModelSize,
+			modelSize: int64(19_900_000_000),
 			check: func(t *testing.T, result string) {
 				val, err := strconv.Atoi(result)
 				require.NoError(t, err)
@@ -516,9 +526,9 @@ func TestCalcAutoGPULayers(t *testing.T) {
 			},
 		},
 		{
-			name:      "16GB VRAM with DefaultModelSize does not fit all layers",
+			name:      "16GB VRAM with int64(19_900_000_000) does not fit all layers",
 			vramKB:    16777216,
-			modelSize: DefaultModelSize,
+			modelSize: int64(19_900_000_000),
 			check: func(t *testing.T, result string) {
 				val, err := strconv.Atoi(result)
 				require.NoError(t, err)
@@ -529,7 +539,7 @@ func TestCalcAutoGPULayers(t *testing.T) {
 		{
 			name:      "vramKB=0 returns fallback 999",
 			vramKB:    0,
-			modelSize: DefaultModelSize,
+			modelSize: int64(19_900_000_000),
 			check: func(t *testing.T, result string) {
 				assert.Equal(t, "999", result)
 			},
@@ -543,9 +553,9 @@ func TestCalcAutoGPULayers(t *testing.T) {
 			},
 		},
 		{
-			name:      "8GB VRAM with DefaultModelSize returns small positive value",
+			name:      "8GB VRAM with int64(19_900_000_000) returns small positive value",
 			vramKB:    8388608,
-			modelSize: DefaultModelSize,
+			modelSize: int64(19_900_000_000),
 			check: func(t *testing.T, result string) {
 				val, err := strconv.Atoi(result)
 				require.NoError(t, err)

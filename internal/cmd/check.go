@@ -32,13 +32,20 @@ var checkCmd = &cobra.Command{
 		fmt.Println("\nAll checks passed.")
 
 		// Model status (info only, does not affect exit code)
-		name, sizeBytes, exists, _ := model.CachedModelInfo("")
-		if exists {
-			sizeGB := float64(sizeBytes) / (1024 * 1024 * 1024)
-			fmt.Printf("  \u2713 Model: %s (%.1fGB)\n", name, sizeGB)
+		cfg, cfgErr := model.LoadConfig()
+		if cfgErr != nil {
+			fmt.Fprintf(os.Stderr, "  ✗ Config: %s\n", cfgErr)
+		} else if err := cfg.ValidateModelIdentity(); err != nil {
+			fmt.Printf("  ✗ Model: %s\n", err)
 		} else {
-			fmt.Printf("  \u2717 Model: not downloaded\n")
-			fmt.Println("System ready. Run fakeoid to download model.")
+			name, sizeBytes, exists, _ := model.CachedModelInfo(cfg)
+			if exists {
+				sizeGB := float64(sizeBytes) / (1024 * 1024 * 1024)
+				fmt.Printf("  ✓ Model: %s (%.1fGB)\n", name, sizeGB)
+			} else {
+				fmt.Printf("  ✗ Model: not downloaded\n")
+				fmt.Println("System ready. Run fakeoid to download model.")
+			}
 		}
 		return nil
 	},
