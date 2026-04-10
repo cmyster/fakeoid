@@ -109,6 +109,8 @@ var rootCmd = &cobra.Command{
 			GPUComputePct:  cfg.EffectiveGPUComputePct(),
 			TotalCUs:       totalCUs,
 			GPUMaxAllocPct: cfg.EffectiveGPUMaxAllocPct(),
+			CacheTypeK:     cfg.EffectiveCacheTypeK(),
+			CacheTypeV:     cfg.EffectiveCacheTypeV(),
 			VRAMSizeKB:     vramSizeKB,
 			ModelFileSize:  cfg.EffectiveModelSize(),
 		})

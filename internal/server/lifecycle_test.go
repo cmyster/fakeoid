@@ -69,6 +69,8 @@ func TestLifecycleBuildCmd(t *testing.T) {
 	assert.Contains(t, args, "--n-gpu-layers 999")
 	assert.Contains(t, args, "--flash-attn on")
 	assert.Contains(t, args, "--host 127.0.0.1")
+	assert.Contains(t, args, "--cache-type-k q8_0")
+	assert.Contains(t, args, "--cache-type-v q8_0")
 
 	// Verify process group setup
 	require.NotNil(t, cmd.SysProcAttr)
@@ -425,6 +427,32 @@ func TestBuildCmdGPULayersUserOverride(t *testing.T) {
 
 	args := strings.Join(cmd.Args[1:], " ")
 	assert.Contains(t, args, "--n-gpu-layers 30", "user override should take priority over auto-calc")
+}
+
+func TestBuildCmdCacheTypeDefault(t *testing.T) {
+	cfg := ServerConfig{
+		LlamaServerPath: "/usr/bin/llama-server",
+		ModelPath:        "/models/test.gguf",
+	}
+	s := NewServer(cfg)
+	cmd := s.BuildCmd()
+	args := strings.Join(cmd.Args[1:], " ")
+	assert.Contains(t, args, "--cache-type-k q8_0")
+	assert.Contains(t, args, "--cache-type-v q8_0")
+}
+
+func TestBuildCmdCacheTypeOverride(t *testing.T) {
+	cfg := ServerConfig{
+		LlamaServerPath: "/usr/bin/llama-server",
+		ModelPath:        "/models/test.gguf",
+		CacheTypeK:       "f16",
+		CacheTypeV:       "q4_0",
+	}
+	s := NewServer(cfg)
+	cmd := s.BuildCmd()
+	args := strings.Join(cmd.Args[1:], " ")
+	assert.Contains(t, args, "--cache-type-k f16")
+	assert.Contains(t, args, "--cache-type-v q4_0")
 }
 
 func TestShutdownSIGTERM(t *testing.T) {

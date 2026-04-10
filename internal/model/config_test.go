@@ -201,6 +201,10 @@ func TestAllEffectiveDefaults(t *testing.T) {
 
 	// GPU VRAM allocation
 	assert.Equal(t, 95, cfg.EffectiveGPUMaxAllocPct())
+
+	// KV cache type
+	assert.Equal(t, "q8_0", cfg.EffectiveCacheTypeK())
+	assert.Equal(t, "q8_0", cfg.EffectiveCacheTypeV())
 }
 
 // TestLoadConfigAllFields writes a JSON with all fields set to non-default values,
@@ -251,6 +255,8 @@ func TestLoadConfigAllFields(t *testing.T) {
 		MaxIterations:         20,
 		GPUComputePct:         75,
 		GPUMaxAllocPct:        80,
+		CacheTypeK:            "f16",
+		CacheTypeV:            "q4_0",
 	}
 
 	data, err := json.Marshal(cfg)
@@ -301,6 +307,8 @@ func TestLoadConfigAllFields(t *testing.T) {
 	assert.Equal(t, cfg.MaxIterations, loaded.MaxIterations)
 	assert.Equal(t, cfg.GPUComputePct, loaded.GPUComputePct)
 	assert.Equal(t, cfg.GPUMaxAllocPct, loaded.GPUMaxAllocPct)
+	assert.Equal(t, cfg.CacheTypeK, loaded.CacheTypeK)
+	assert.Equal(t, cfg.CacheTypeV, loaded.CacheTypeV)
 
 	// Verify Effective* methods return the custom values (not defaults)
 	assert.Equal(t, 9090, loaded.EffectivePort())
@@ -323,6 +331,8 @@ func TestLoadConfigAllFields(t *testing.T) {
 	assert.Equal(t, 20, loaded.EffectiveMaxIterations())
 	assert.Equal(t, 75, loaded.EffectiveGPUComputePct())
 	assert.Equal(t, 80, loaded.EffectiveGPUMaxAllocPct())
+	assert.Equal(t, "f16", loaded.EffectiveCacheTypeK())
+	assert.Equal(t, "q4_0", loaded.EffectiveCacheTypeV())
 }
 
 // TestLoadConfigBackwardCompatibleExtended verifies that a 3-field config from
@@ -461,6 +471,10 @@ func TestConfigSampleIsValidAndComplete(t *testing.T) {
 
 	// GPU VRAM allocation
 	assert.Equal(t, empty.EffectiveGPUMaxAllocPct(), cfg.GPUMaxAllocPct, "gpu_max_alloc_pct")
+
+	// KV cache type
+	assert.Equal(t, empty.EffectiveCacheTypeK(), cfg.CacheTypeK, "cache_type_k")
+	assert.Equal(t, empty.EffectiveCacheTypeV(), cfg.CacheTypeV, "cache_type_v")
 }
 
 func TestEffectiveGPUComputePctDefault(t *testing.T) {

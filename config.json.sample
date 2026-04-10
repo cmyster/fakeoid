@@ -36,6 +36,13 @@
   "gpu_compute_pct": 90,
   // Maximum percentage of GPU VRAM allocatable per request (10-100, default 95 = no competing GPU consumers; 5% OS/driver reserve)
   "gpu_max_alloc_pct": 95,
+  // KV cache quantization type for attention keys (q8_0 = half the VRAM of f16,
+  // fixes OOM on Gemma 4 31B dual-cache SWA+global at 32K context on 24GB cards).
+  // Valid values: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1
+  "cache_type_k": "q8_0",
+  // KV cache quantization type for attention values (see cache_type_k for rationale)
+  // Valid values: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1
+  "cache_type_v": "q8_0",
 
   // --- Timeouts ---
   // Seconds to wait after SIGTERM before sending SIGKILL

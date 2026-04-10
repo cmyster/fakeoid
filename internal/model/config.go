@@ -33,6 +33,8 @@ type ModelConfig struct {
 	LogBufferMax  int    `json:"log_buffer_max"`
 	GPUComputePct  int    `json:"gpu_compute_pct"`
 	GPUMaxAllocPct int    `json:"gpu_max_alloc_pct"`
+	CacheTypeK     string `json:"cache_type_k"`
+	CacheTypeV     string `json:"cache_type_v"`
 
 	// Timeouts
 	KillTimeoutSec    int `json:"kill_timeout_seconds"`
@@ -231,6 +233,25 @@ func (c *ModelConfig) EffectiveGPUMaxAllocPct() int {
 		return 100
 	}
 	return c.GPUMaxAllocPct
+}
+
+// EffectiveCacheTypeK returns the KV cache quantization type for keys,
+// or "q8_0" if not set. q8_0 halves the KV cache footprint vs f16,
+// fixing OOM on Gemma 4 31B dual-cache (SWA + global) at 32K context.
+func (c *ModelConfig) EffectiveCacheTypeK() string {
+	if c.CacheTypeK == "" {
+		return "q8_0"
+	}
+	return c.CacheTypeK
+}
+
+// EffectiveCacheTypeV returns the KV cache quantization type for values,
+// or "q8_0" if not set. See EffectiveCacheTypeK for rationale.
+func (c *ModelConfig) EffectiveCacheTypeV() string {
+	if c.CacheTypeV == "" {
+		return "q8_0"
+	}
+	return c.CacheTypeV
 }
 
 // CalcAutoGPULayers calculates the number of GPU layers to offload based on

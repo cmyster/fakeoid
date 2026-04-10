@@ -29,6 +29,8 @@ type ServerConfig struct {
 	GPUComputePct  int
 	TotalCUs       int
 	GPUMaxAllocPct int
+	CacheTypeK     string
+	CacheTypeV     string
 	VRAMSizeKB     uint64
 	ModelFileSize  int64
 }
@@ -85,6 +87,14 @@ func (s *Server) BuildCmd() *exec.Cmd {
 	if host == "" {
 		host = "127.0.0.1"
 	}
+	cacheTypeK := s.cfg.CacheTypeK
+	if cacheTypeK == "" {
+		cacheTypeK = "q8_0"
+	}
+	cacheTypeV := s.cfg.CacheTypeV
+	if cacheTypeV == "" {
+		cacheTypeV = "q8_0"
+	}
 	cmd := exec.Command(s.cfg.LlamaServerPath,
 		"--model", s.cfg.ModelPath,
 		"--port", strconv.Itoa(s.port),
@@ -92,6 +102,8 @@ func (s *Server) BuildCmd() *exec.Cmd {
 		"--n-gpu-layers", gpuLayers,
 		"--flash-attn", flashAttn,
 		"--host", host,
+		"--cache-type-k", cacheTypeK,
+		"--cache-type-v", cacheTypeV,
 	)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
