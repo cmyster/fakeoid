@@ -13,7 +13,7 @@ func TestInjectFrontmatter(t *testing.T) {
 		Timestamp:   time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC),
 		SessionID:   "20260316-120000",
 		Outcome:     "success",
-		Agents:      []AgentOutcome{{Number: 1, Name: "Systems Engineer", Status: "success"}, {Number: 4, Name: "Software Engineer", Status: "success"}, {Number: 5, Name: "QE Engineer", Status: "success"}},
+		Agents:      []AgentOutcome{{Number: 1, Name: "Systems Engineer", Status: "success"}, {Number: 4, Name: "Software Engineer", Status: "success"}, {Number: 5, Name: "QA Team Leader", Status: "success"}},
 		DurationSec: 42.5,
 	}
 	result, err := InjectFrontmatter(fm, "# Task")
@@ -31,7 +31,7 @@ func TestParseFrontmatter(t *testing.T) {
 		Timestamp:   time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC),
 		SessionID:   "20260316-120000",
 		Outcome:     "success",
-		Agents:      []AgentOutcome{{Number: 1, Name: "Systems Engineer", Status: "success"}, {Number: 4, Name: "Software Engineer", Status: "success"}, {Number: 5, Name: "QE Engineer", Status: "success"}},
+		Agents:      []AgentOutcome{{Number: 1, Name: "Systems Engineer", Status: "success"}, {Number: 4, Name: "Software Engineer", Status: "success"}, {Number: 5, Name: "QA Team Leader", Status: "success"}},
 		DurationSec: 42.5,
 	}
 	injected, err := InjectFrontmatter(fm, "# Task\nSome content")
@@ -102,7 +102,7 @@ func TestInjectFrontmatter_AgentOutcome(t *testing.T) {
 			{Number: 2, Name: "Prompt Engineer", Status: "failed"},
 			{Number: 3, Name: "Software Architect", Status: "skipped"},
 			{Number: 4, Name: "Software Engineer", Status: "success"},
-			{Number: 5, Name: "QE Engineer", Status: "success"},
+			{Number: 5, Name: "QA Team Leader", Status: "success"},
 		},
 		DurationSec: 30.0,
 		TestResult:  "pass",

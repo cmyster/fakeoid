@@ -1013,7 +1013,7 @@ func (s *Shell) runAgent3Phase(ctx context.Context, taskFilePath string) (string
 	return changePlanPath, nil
 }
 
-// runPipeline drives the full Agent 4 -> Agent 5 pipeline with feedback loop.
+// runPipeline drives the full Agent 4 -> Agent 5 -> Agent 6 -> Agent 7 pipeline with feedback loop.
 // After Agent 4 writes code and handoff, it runs the feedback loop.
 func (s *Shell) runPipeline(ctx context.Context, taskFilePath string) error {
 	startTime := time.Now()
@@ -1200,7 +1200,7 @@ func (s *Shell) runPipeline(ctx context.Context, taskFilePath string) error {
 	} else {
 		// No feedback loop -- Agent 5 skipped
 		agentOutcomes = append(agentOutcomes, state.AgentOutcome{
-			Number: 5, Name: "QE Engineer", Status: "skipped",
+			Number: 5, Name: "QA Team Leader", Status: "skipped",
 		})
 		PrintPipelineSummary(s.stderr, agentOutcomes)
 		o := "success"
@@ -1211,10 +1211,10 @@ func (s *Shell) runPipeline(ctx context.Context, taskFilePath string) error {
 	return nil
 }
 
-// runAgent5Phase drives Agent 5 through its autonomous LLM loop:
-// stream response, parse code blocks, write test files, run go test.
-// Returns the test output, whether tests passed, and any error.
-func (s *Shell) runAgent5Phase(ctx context.Context, handoffPath string, taskFileName string, iteration int) (string, bool, error) {
+// runAgent5Phase drives Agent 5 (QA Team Leader) to analyze the handoff and
+// produce a structured test plan that splits work into sub-agents.
+// Returns the parsed test plan entries and any error.
+func (s *Shell) runAgent5Phase(ctx context.Context, handoffPath string, taskFileName string, iteration int) ([]agent.TestPlanEntry, error) {
 	a5Start := time.Now()
 	cwd := s.cwd
 	if s.sandbox != nil {
@@ -1223,10 +1223,10 @@ func (s *Shell) runAgent5Phase(ctx context.Context, handoffPath string, taskFile
 		cwd, _ = os.Getwd()
 	}
 
-	// Read README.md for build instructions (used by Agent 5 prompt and verification)
+	// Read README.md for build instructions (used by Agent 5 prompt)
 	readmeContent := agent.ReadBuildInstructions(cwd, s.sandbox)
 
-	// Read task requirements for smoke testing: prefer enriched prompt, fall back to raw task file
+	// Read task requirements: prefer enriched prompt, fall back to raw task file
 	taskRequirements := ""
 	base := strings.TrimSuffix(taskFileName, ".md")
 	enrichedPath := filepath.Join(s.runner.TaskDir(), base+"-enriched.md")
@@ -1241,9 +1241,64 @@ func (s *Shell) runAgent5Phase(ctx context.Context, handoffPath string, taskFile
 	s.runner.SwitchAgent(a5)
 
 	// Inject instruction as first user message
-	s.runner.AppendUserMessage("Verify the code changes from the handoff. Follow all 4 steps: sanity, smoke, unit tests, summary.")
+	s.runner.AppendUserMessage("Analyze the code changes from the handoff and produce a structured test plan. Split testing into blackbox (sanity/smoke) and whitebox (unit/integration) scopes.")
 
 	// Autonomous loop: stream -> HandleResponse -> break on ActionComplete
+	var allResponses strings.Builder
+	for {
+		responseBuf, streamErr := s.streamResponse(ctx)
+		if streamErr != nil {
+			return nil, streamErr
+		}
+		s.runner.AppendAssistantMessage(responseBuf)
+		allResponses.WriteString(responseBuf)
+
+		action := a5.HandleResponse(responseBuf)
+		if action.Type == agent.ActionComplete {
+			break
+		}
+		s.runner.AppendUserMessage("Continue producing the test plan. End with ## END TEST PLAN.")
+	}
+
+	// Persist Agent 5 conversation (non-fatal)
+	if s.sandbox != nil {
+		_, convErr := agent.WriteConversationFile(s.sandbox, s.runner.TaskDir(), taskFileName, 5, "QA Team Leader", iteration, s.runner.History(), time.Since(a5Start))
+		if convErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to write Agent 5 conversation: %v\n", convErr)
+		}
+	}
+
+	// Parse the test plan
+	entries := agent.ParseTestPlan(allResponses.String())
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("Agent 5 produced no test plan entries")
+	}
+
+	return entries, nil
+}
+
+// runAgent6SubPhase drives a single Agent 6 (QA Tester) sub-agent instance.
+// Returns the test output, whether tests passed, and any error.
+func (s *Shell) runAgent6SubPhase(ctx context.Context, a6 *agent.Agent6, handoffPath string, taskFileName string, iteration int) (string, bool, error) {
+	a6Start := time.Now()
+	cwd := s.cwd
+	if s.sandbox != nil {
+		cwd = s.sandbox.CWD()
+	} else if cwd == "" {
+		cwd, _ = os.Getwd()
+	}
+
+	readmeContent := agent.ReadBuildInstructions(cwd, s.sandbox)
+	s.runner.SwitchAgent(a6)
+
+	// Inject instruction based on scope
+	if a6.Scope() == agent.ScopeBlackBox {
+		s.runner.AppendUserMessage("Write and output the test.sh script for sanity and smoke testing. Follow the instructions in your system prompt.")
+	} else {
+		s.runner.AppendUserMessage("Write unit/integration tests for the source code. Follow the instructions in your system prompt.")
+	}
+
+	// Autonomous loop
 	var allResponses strings.Builder
 	for {
 		responseBuf, streamErr := s.streamResponse(ctx)
@@ -1253,7 +1308,7 @@ func (s *Shell) runAgent5Phase(ctx context.Context, handoffPath string, taskFile
 		s.runner.AppendAssistantMessage(responseBuf)
 		allResponses.WriteString(responseBuf)
 
-		action := a5.HandleResponse(responseBuf)
+		action := a6.HandleResponse(responseBuf)
 		if action.Type == agent.ActionComplete {
 			break
 		}
@@ -1264,7 +1319,6 @@ func (s *Shell) runAgent5Phase(ctx context.Context, handoffPath string, taskFile
 	blocks := agent.ParseCodeBlocks(allResponses.String())
 	if len(blocks) > 0 {
 		results, blocked := agent.WriteCodeBlocks(s.sandbox, blocks)
-		// Print file confirmations
 		fmt.Fprintln(s.stderr)
 		for _, r := range results {
 			fmt.Fprintf(s.stderr, "  \u2713 %s (%s)\n", r.Path, r.Action)
@@ -1275,34 +1329,38 @@ func (s *Shell) runAgent5Phase(ctx context.Context, handoffPath string, taskFile
 		fmt.Fprintln(s.stderr)
 	}
 
-	// Language-aware verification: Go projects use go test, others use README build commands
+	// Run tests based on scope
 	var testOutput string
 	var passed bool
 	var testErr error
 
 	isGo := agent.IsGoProject(cwd)
-	if isGo {
-		// Existing Go path: ExtractPackages + RunGoTest
-		handoffContent, err := os.ReadFile(handoffPath)
-		if err != nil {
-			return "", false, fmt.Errorf("read handoff: %w", err)
-		}
-		packages := agent.ExtractPackages(string(handoffContent))
-		if len(packages) == 0 {
-			packages = []string{"./..."}
-		}
-		testOutput, passed, testErr = agent.RunGoTest(ctx, cwd, packages, s.stderr)
-	} else {
-		// Non-Go path: run test.sh if Agent 5 created one, otherwise fall back to README build commands
+
+	if a6.Scope() == agent.ScopeBlackBox {
+		// Black-box: run test.sh or README build commands
 		testOutput, passed, testErr = agent.RunTestScript(ctx, cwd, readmeContent, s.stderr)
+	} else {
+		// White-box: run language-specific tests
+		if isGo {
+			handoffContent, err := os.ReadFile(handoffPath)
+			if err != nil {
+				return "", false, fmt.Errorf("read handoff: %w", err)
+			}
+			packages := agent.ExtractPackages(string(handoffContent))
+			if len(packages) == 0 {
+				packages = []string{"./..."}
+			}
+			testOutput, passed, testErr = agent.RunGoTest(ctx, cwd, packages, s.stderr)
+		} else {
+			testOutput, passed, testErr = agent.RunTestScript(ctx, cwd, readmeContent, s.stderr)
+		}
 	}
 	if testErr != nil {
 		return testOutput, false, testErr
 	}
 
-	// Check for compilation error -- if output contains "# " build error prefix,
-	// retry Agent 5 once with the compilation error as context
-	if !passed && isCompilationError(testOutput) {
+	// Check for compilation error in whitebox -- retry once
+	if !passed && a6.Scope() == agent.ScopeWhiteBox && isCompilationError(testOutput) {
 		s.runner.AppendUserMessage("The tests have a compilation error. Fix the test code:\n\n```\n" + testOutput + "\n```")
 		var retryResponses strings.Builder
 		for {
@@ -1313,7 +1371,7 @@ func (s *Shell) runAgent5Phase(ctx context.Context, handoffPath string, taskFile
 			s.runner.AppendAssistantMessage(responseBuf)
 			retryResponses.WriteString(responseBuf)
 
-			action := a5.HandleResponse(responseBuf)
+			action := a6.HandleResponse(responseBuf)
 			if action.Type == agent.ActionComplete {
 				break
 			}
@@ -1345,11 +1403,15 @@ func (s *Shell) runAgent5Phase(ctx context.Context, handoffPath string, taskFile
 		}
 	}
 
-	// Persist Agent 5 conversation (non-fatal)
+	// Persist Agent 6 sub-agent conversation (non-fatal)
+	scopeLabel := "QA Tester (Black-Box)"
+	if a6.Scope() == agent.ScopeWhiteBox {
+		scopeLabel = "QA Tester (White-Box)"
+	}
 	if s.sandbox != nil {
-		_, convErr := agent.WriteConversationFile(s.sandbox, s.runner.TaskDir(), taskFileName, 5, "QE Engineer", iteration, s.runner.History(), time.Since(a5Start))
+		_, convErr := agent.WriteConversationFile(s.sandbox, s.runner.TaskDir(), taskFileName, 6, scopeLabel, iteration, s.runner.History(), time.Since(a6Start))
 		if convErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to write Agent 5 conversation: %v\n", convErr)
+			fmt.Fprintf(os.Stderr, "Warning: failed to write Agent 6 conversation: %v\n", convErr)
 		}
 	}
 
@@ -1369,18 +1431,72 @@ func (s *Shell) runAgent5Phase(ctx context.Context, handoffPath string, taskFile
 	return testOutput, passed, nil
 }
 
-// runAgent6Phase drives Agent 6 (Course Corrector) to review work against the
+// runAgent6TestingPhase orchestrates the full Agent 6 testing pipeline:
+// Agent 6.1 (blackbox) runs first; if it passes, Agent 6.2 (whitebox) runs.
+// Returns the combined test output, whether all tests passed, and any error.
+func (s *Shell) runAgent6TestingPhase(ctx context.Context, testPlan []agent.TestPlanEntry, handoffPath string, taskFileName string, iteration int) (string, bool, error) {
+	cwd := s.cwd
+	if s.sandbox != nil {
+		cwd = s.sandbox.CWD()
+	} else if cwd == "" {
+		cwd, _ = os.Getwd()
+	}
+
+	readmeContent := agent.ReadBuildInstructions(cwd, s.sandbox)
+	var allTestOutput strings.Builder
+
+	// Run sub-agents sequentially: blackbox first, then whitebox
+	for _, entry := range testPlan {
+		var a6 *agent.Agent6
+		switch entry.Scope {
+		case agent.ScopeBlackBox:
+			PrintTransition(s.stderr, 6, "QA Tester (Black-Box)")
+			a6 = agent.NewAgent6BlackBox(cwd, s.runner.TaskDir(), entry, readmeContent, s.sandbox)
+		case agent.ScopeWhiteBox:
+			// Check if whitebox was skipped
+			if len(entry.Tests) == 1 && strings.Contains(entry.Tests[0], "skipped") {
+				fmt.Fprintf(s.stderr, "\n--- Agent 6.2: QA Tester (White-Box) -- skipped (no testable internal logic) ---\n")
+				continue
+			}
+			PrintTransition(s.stderr, 6, "QA Tester (White-Box)")
+			agent.ReadSourceForWhiteBox(cwd, &entry, s.sandbox)
+			a6 = agent.NewAgent6WhiteBox(cwd, s.runner.TaskDir(), entry, s.sandbox)
+		default:
+			continue
+		}
+
+		testOutput, passed, err := s.runAgent6SubPhase(ctx, a6, handoffPath, taskFileName, iteration)
+		allTestOutput.WriteString(testOutput)
+		allTestOutput.WriteString("\n")
+
+		if err != nil {
+			return allTestOutput.String(), false, err
+		}
+
+		if !passed {
+			// For blackbox failures, abort immediately -- no point running whitebox
+			if entry.Scope == agent.ScopeBlackBox {
+				fmt.Fprintf(s.stderr, "\n--- Black-box tests FAILED -- aborting further testing ---\n")
+			}
+			return allTestOutput.String(), false, nil
+		}
+	}
+
+	return allTestOutput.String(), true, nil
+}
+
+// runAgent7Phase drives Agent 7 (Course Corrector) to review work against the
 // original plan and determine if corrections are needed. Single-turn pattern.
-func (s *Shell) runAgent6Phase(ctx context.Context, taskFilePath, handoffPath, testOutput string, iteration int) (approved bool, correctionPath string, err error) {
-	a6Start := time.Now()
+func (s *Shell) runAgent7Phase(ctx context.Context, taskFilePath, handoffPath, testOutput string, iteration int) (approved bool, correctionPath string, err error) {
+	a7Start := time.Now()
 	taskBase := filepath.Base(taskFilePath)
 	taskDir := s.runner.TaskDir()
 	base := strings.TrimSuffix(taskBase, ".md")
 	enrichedFile := filepath.Join(taskDir, base+"-enriched.md")
 	changePlanFile := filepath.Join(taskDir, base+"-change-plan.md")
 
-	a6 := agent.NewAgent6(taskDir, enrichedFile, changePlanFile, testOutput, handoffPath)
-	s.runner.SwitchAgent(a6)
+	a7 := agent.NewAgent7(taskDir, enrichedFile, changePlanFile, testOutput, handoffPath)
+	s.runner.SwitchAgent(a7)
 
 	s.runner.AppendUserMessage("Review the work against the original plan and determine if corrections are needed.")
 
@@ -1390,17 +1506,17 @@ func (s *Shell) runAgent6Phase(ctx context.Context, taskFilePath, handoffPath, t
 	}
 	s.runner.AppendAssistantMessage(responseBuf)
 
-	// Persist conversation (non-fatal, per CORR-07)
+	// Persist conversation (non-fatal)
 	if s.sandbox != nil {
-		_, convErr := agent.WriteConversationFile(s.sandbox, taskDir, taskBase, 6, "Course Corrector", iteration, s.runner.History(), time.Since(a6Start))
+		_, convErr := agent.WriteConversationFile(s.sandbox, taskDir, taskBase, 7, "Course Corrector", iteration, s.runner.History(), time.Since(a7Start))
 		if convErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to write Agent 6 conversation: %v\n", convErr)
+			fmt.Fprintf(os.Stderr, "Warning: failed to write Agent 7 conversation: %v\n", convErr)
 		}
 	}
 
 	// Parse verdict
-	a6Approved, body := agent.ParseCorrectionVerdict(responseBuf)
-	if !a6Approved {
+	a7Approved, body := agent.ParseCorrectionVerdict(responseBuf)
+	if !a7Approved {
 		cp, writeErr := agent.WriteCorrectionFile(s.sandbox, taskDir, taskBase, iteration, body)
 		if writeErr != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to write correction file: %v\n", writeErr)
@@ -1429,7 +1545,7 @@ func (s *Shell) runAgent4FixPhase(ctx context.Context, taskFilePath, testOutput 
 	if correctionPath != "" {
 		corrData, corrErr := os.ReadFile(correctionPath)
 		if corrErr == nil {
-			fixPrompt += "\n\n## Course Correction (from Agent 6)\n\n" + string(corrData) + "\n\nAddress these corrections in addition to fixing the test failures."
+			fixPrompt += "\n\n## Course Correction (from Agent 7)\n\n" + string(corrData) + "\n\nAddress these corrections in addition to fixing the test failures."
 		}
 	}
 	s.runner.AppendUserMessage(fixPrompt)
@@ -1566,58 +1682,68 @@ func (s *Shell) verifyAgent4Build(ctx context.Context, cwd string, allResponses 
 	return results, nil
 }
 
-// runFeedbackLoop orchestrates the Agent 5 (test) -> Agent 6 (review) -> Agent 4 (fix) feedback cycle.
-// Agent 6 runs after every Agent 5 iteration. The loop exits only when tests pass AND Agent 6 approves.
+// runFeedbackLoop orchestrates the Agent 5 (plan) -> Agent 6 (test) -> Agent 7 (review) -> Agent 4 (fix) feedback cycle.
+// Agent 5 produces a test plan, Agent 6 sub-agents execute it sequentially (6.1 blackbox, 6.2 whitebox),
+// Agent 7 reviews. The loop exits only when all tests pass AND Agent 7 approves.
 // Returns whether tests passed, accumulated agent outcomes, and any error.
 func (s *Shell) runFeedbackLoop(ctx context.Context, handoffPath, taskFilePath string) (bool, []state.AgentOutcome, error) {
 	var outcomes []state.AgentOutcome
 	for i := 1; i <= s.maxIterations; i++ {
 		fmt.Fprintf(s.stderr, "\n--- Feedback Loop: Iteration %d ---\n\n", i)
 
-		PrintTransition(s.stderr, 5, "QE Engineer")
-		testOutput, passed, err := s.runAgent5Phase(ctx, handoffPath, filepath.Base(taskFilePath), i)
-		if err != nil {
-			outcomes = append(outcomes, state.AgentOutcome{Number: 5, Name: "QE Engineer", Status: "failed"})
-			return false, outcomes, err
+		// Agent 5: QA Team Leader -- produces test plan
+		PrintTransition(s.stderr, 5, "QA Team Leader")
+		testPlan, planErr := s.runAgent5Phase(ctx, handoffPath, filepath.Base(taskFilePath), i)
+		if planErr != nil {
+			outcomes = append(outcomes, state.AgentOutcome{Number: 5, Name: "QA Team Leader", Status: "failed"})
+			return false, outcomes, planErr
+		}
+		outcomes = append(outcomes, state.AgentOutcome{Number: 5, Name: "QA Team Leader", Status: "success"})
+
+		// Agent 6: QA Tester sub-agents -- execute test plan (6.1 blackbox -> 6.2 whitebox)
+		testOutput, passed, testErr := s.runAgent6TestingPhase(ctx, testPlan, handoffPath, filepath.Base(taskFilePath), i)
+		if testErr != nil {
+			outcomes = append(outcomes, state.AgentOutcome{Number: 6, Name: "QA Tester", Status: "failed"})
+			return false, outcomes, testErr
 		}
 
-		// Agent 6: Course Corrector -- runs every iteration (D-11)
+		// Agent 7: Course Corrector -- runs every iteration
 		correctionPath := ""
-		a6Approved := true
+		a7Approved := true
 		if s.sandbox != nil {
-			PrintTransition(s.stderr, 6, "Course Corrector")
-			var a6Err error
-			a6Approved, correctionPath, a6Err = s.runAgent6Phase(ctx, taskFilePath, handoffPath, testOutput, i)
-			if a6Err != nil {
-				// Non-fatal: treat as implicit approval (D-16, D-17)
-				fmt.Fprintf(os.Stderr, "Warning: Agent 6 failed: %v\n", a6Err)
-				a6Approved = true
+			PrintTransition(s.stderr, 7, "Course Corrector")
+			var a7Err error
+			a7Approved, correctionPath, a7Err = s.runAgent7Phase(ctx, taskFilePath, handoffPath, testOutput, i)
+			if a7Err != nil {
+				// Non-fatal: treat as implicit approval
+				fmt.Fprintf(os.Stderr, "Warning: Agent 7 failed: %v\n", a7Err)
+				a7Approved = true
 				correctionPath = ""
-				outcomes = append(outcomes, state.AgentOutcome{Number: 6, Name: "Course Corrector", Status: "failed"})
-			} else if a6Approved {
-				outcomes = append(outcomes, state.AgentOutcome{Number: 6, Name: "Course Corrector", Status: "success"})
+				outcomes = append(outcomes, state.AgentOutcome{Number: 7, Name: "Course Corrector", Status: "failed"})
+			} else if a7Approved {
+				outcomes = append(outcomes, state.AgentOutcome{Number: 7, Name: "Course Corrector", Status: "success"})
 			} else {
-				// Agent 6 detected drift -- correction needed, another iteration
-				outcomes = append(outcomes, state.AgentOutcome{Number: 6, Name: "Course Corrector", Status: "success"})
+				// Agent 7 detected drift -- correction needed, another iteration
+				outcomes = append(outcomes, state.AgentOutcome{Number: 7, Name: "Course Corrector", Status: "success"})
 			}
 		} else {
-			// No sandbox -- Agent 6 skipped
-			outcomes = append(outcomes, state.AgentOutcome{Number: 6, Name: "Course Corrector", Status: "skipped"})
+			// No sandbox -- Agent 7 skipped
+			outcomes = append(outcomes, state.AgentOutcome{Number: 7, Name: "Course Corrector", Status: "skipped"})
 		}
 
-		// Exit: tests pass AND Agent 6 approves (D-13)
-		if passed && a6Approved {
+		// Exit: tests pass AND Agent 7 approves
+		if passed && a7Approved {
 			s.printPipelineComplete()
-			outcomes = append(outcomes, state.AgentOutcome{Number: 5, Name: "QE Engineer", Status: "success"})
+			outcomes = append(outcomes, state.AgentOutcome{Number: 6, Name: "QA Tester", Status: "success"})
 			return true, outcomes, nil
 		}
 
-		// Continue: either tests failed or Agent 6 detected drift
+		// Continue: either tests failed or Agent 7 detected drift
 		PrintTransition(s.stderr, 4, "Software Engineer")
 		var fixErr error
 		handoffPath, fixErr = s.runAgent4FixPhase(ctx, taskFilePath, testOutput, i+1, correctionPath)
 		if fixErr != nil {
-			outcomes = append(outcomes, state.AgentOutcome{Number: 5, Name: "QE Engineer", Status: "failed"})
+			outcomes = append(outcomes, state.AgentOutcome{Number: 6, Name: "QA Tester", Status: "failed"})
 			return false, outcomes, fixErr
 		}
 	}
@@ -1671,7 +1797,7 @@ func getLastTaskFile(taskDir string) string {
 // which artifact files exist for a given task. Returns a human-readable stage name.
 func detectResumeStage(taskDir, taskBase string) string {
 	if _, err := os.Stat(filepath.Join(taskDir, taskBase+"-handoff.md")); err == nil {
-		return "Agent 5: QE Engineer"
+		return "Agent 5: QA Team Leader"
 	}
 	if _, err := os.Stat(filepath.Join(taskDir, taskBase+"-change-plan.md")); err == nil {
 		return "Agent 4: Software Engineer"
@@ -1734,7 +1860,7 @@ func (s *Shell) resumeLastTask(ctx context.Context) error {
 
 	// Resume from handoff → run feedback loop (Agent 5)
 	if _, err := os.Stat(handoffFile); err == nil {
-		fmt.Fprintf(s.stderr, "\nResuming from Agent 5 (QE Engineer)...\n")
+		fmt.Fprintf(s.stderr, "\nResuming from Agent 5 (QA Team Leader)...\n")
 		agentOutcomes = append(agentOutcomes,
 			state.AgentOutcome{Number: 2, Name: "Prompt Engineer", Status: "success"},
 			state.AgentOutcome{Number: 3, Name: "Software Architect", Status: "success"},
@@ -1758,7 +1884,7 @@ func (s *Shell) resumeLastTask(ctx context.Context) error {
 		return nil
 	}
 
-	// Resume from change plan → run Agent 4 + Agent 5
+	// Resume from change plan → run Agent 4 + Agent 5/6/7
 	inputForAgent4 := taskFile
 	if _, err := os.Stat(enrichedFile); err == nil {
 		inputForAgent4 = enrichedFile
@@ -1773,7 +1899,7 @@ func (s *Shell) resumeLastTask(ctx context.Context) error {
 		return s.runPipelineFromAgent4(ctx, taskFile, changePlanFile, sessionID, startTime, &outcome, &agentOutcomes)
 	}
 
-	// Resume from enriched → run Agent 3 + Agent 4 + Agent 5
+	// Resume from enriched → run Agent 3 + Agent 4 + Agent 5/6/7
 	if _, err := os.Stat(enrichedFile); err == nil {
 		fmt.Fprintf(s.stderr, "\nResuming from Agent 3 (Software Architect)...\n")
 		agentOutcomes = append(agentOutcomes,
@@ -1796,7 +1922,7 @@ func (s *Shell) resumeLastTask(ctx context.Context) error {
 	return s.runPipeline(ctx, taskFile)
 }
 
-// runPipelineFromAgent4 runs Agent 4 → Agent 5 feedback loop.
+// runPipelineFromAgent4 runs Agent 4 → Agent 5/6/7 feedback loop.
 // Shared between runPipeline and resumeLastTask.
 func (s *Shell) runPipelineFromAgent4(ctx context.Context, taskFilePath, changePlanPath, sessionID string, startTime time.Time, outcome **string, agentOutcomes *[]state.AgentOutcome) error {
 	cwd := s.cwd
@@ -1896,7 +2022,7 @@ func (s *Shell) runPipelineFromAgent4(ctx context.Context, taskFilePath, changeP
 		}
 	} else {
 		*agentOutcomes = append(*agentOutcomes, state.AgentOutcome{
-			Number: 5, Name: "QE Engineer", Status: "skipped",
+			Number: 5, Name: "QA Team Leader", Status: "skipped",
 		})
 		PrintPipelineSummary(s.stderr, *agentOutcomes)
 		o := "success"

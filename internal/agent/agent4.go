@@ -77,7 +77,7 @@ func (a *Agent4) TaskDir() string {
 	return a.taskDir
 }
 
-// WriteHandoffFile creates a handoff markdown file for Agent 5 (Tester).
+// WriteHandoffFile creates a handoff markdown file for Agent 5 (QA Team Leader).
 // The handoff file is named by stripping .md from taskFileName and appending
 // "-handoff.md". It contains sections for changes made, files modified/created,
 // and test suggestions. Writes are routed through the sandbox.

@@ -1,129 +1,176 @@
 package agent
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestAgent6_NewAgent6_ReturnsNonNil(t *testing.T) {
+func TestAgent6BlackBox_ImplementsAgent(t *testing.T) {
 	dir := t.TempDir()
-	enrichedFile := filepath.Join(dir, "001-test-enriched.md")
-	changePlanFile := filepath.Join(dir, "001-test-change-plan.md")
-	handoffFile := filepath.Join(dir, "001-test-handoff.md")
-
-	require.NoError(t, os.WriteFile(enrichedFile, []byte("enriched content"), 0o644))
-	require.NoError(t, os.WriteFile(changePlanFile, []byte("change plan content"), 0o644))
-	require.NoError(t, os.WriteFile(handoffFile, []byte("handoff content"), 0o644))
-
-	a := NewAgent6(dir, enrichedFile, changePlanFile, "test output here", handoffFile)
-	require.NotNil(t, a)
-	assert.Equal(t, 6, a.Number())
-	assert.Equal(t, "Course Corrector", a.Name())
-}
-
-func TestAgent6_ImplementsAgent(t *testing.T) {
-	dir := t.TempDir()
-	enrichedFile := filepath.Join(dir, "001-test-enriched.md")
-	changePlanFile := filepath.Join(dir, "001-test-change-plan.md")
-	handoffFile := filepath.Join(dir, "001-test-handoff.md")
-
-	require.NoError(t, os.WriteFile(enrichedFile, []byte("enriched"), 0o644))
-	require.NoError(t, os.WriteFile(changePlanFile, []byte("plan"), 0o644))
-	require.NoError(t, os.WriteFile(handoffFile, []byte("handoff"), 0o644))
-
-	a := NewAgent6(dir, enrichedFile, changePlanFile, "test output", handoffFile)
-	var _ Agent = a // compile-time interface check
-}
-
-func TestAgent6_HandleResponse_AlwaysComplete(t *testing.T) {
-	a := &Agent6{}
-	for i := 0; i < 5; i++ {
-		action := a.HandleResponse("response")
-		assert.Equal(t, ActionComplete, action.Type)
+	plan := TestPlanEntry{
+		Scope:    ScopeBlackBox,
+		Purpose:  "A CLI tool",
+		BuildCmd: "go build ./...",
+		RunCmd:   "./tool",
+		Tests:    []string{"Build succeeds"},
 	}
+	a := NewAgent6BlackBox(dir, dir, plan, "", nil)
+	var _ Agent = a // compile-time interface check
+	assert.NotNil(t, a)
 }
 
-func TestAgent6_SystemPrompt_ContainsAllSections(t *testing.T) {
+func TestAgent6WhiteBox_ImplementsAgent(t *testing.T) {
 	dir := t.TempDir()
-	enrichedFile := filepath.Join(dir, "001-test-enriched.md")
-	changePlanFile := filepath.Join(dir, "001-test-change-plan.md")
-	handoffFile := filepath.Join(dir, "001-test-handoff.md")
+	plan := TestPlanEntry{
+		Scope:       ScopeWhiteBox,
+		SourceFiles: []string{"internal/foo.go"},
+		Tests:       []string{"Test Foo returns bar"},
+	}
+	a := NewAgent6WhiteBox(dir, dir, plan, nil)
+	var _ Agent = a
+	assert.NotNil(t, a)
+}
 
-	require.NoError(t, os.WriteFile(enrichedFile, []byte("ENRICHED_PROMPT_CONTENT"), 0o644))
-	require.NoError(t, os.WriteFile(changePlanFile, []byte("CHANGE_PLAN_CONTENT"), 0o644))
-	require.NoError(t, os.WriteFile(handoffFile, []byte("HANDOFF_CONTENT"), 0o644))
+func TestAgent6_Number(t *testing.T) {
+	a := &Agent6{}
+	assert.Equal(t, 6, a.Number())
+}
 
-	a := NewAgent6(dir, enrichedFile, changePlanFile, "TEST_OUTPUT_CONTENT", handoffFile)
+func TestAgent6BlackBox_Name(t *testing.T) {
+	a := &Agent6{scope: ScopeBlackBox}
+	assert.Equal(t, "QA Tester (Black-Box)", a.Name())
+}
+
+func TestAgent6WhiteBox_Name(t *testing.T) {
+	a := &Agent6{scope: ScopeWhiteBox}
+	assert.Equal(t, "QA Tester (White-Box)", a.Name())
+}
+
+func TestAgent6_Scope(t *testing.T) {
+	a := &Agent6{scope: ScopeBlackBox}
+	assert.Equal(t, ScopeBlackBox, a.Scope())
+
+	a2 := &Agent6{scope: ScopeWhiteBox}
+	assert.Equal(t, ScopeWhiteBox, a2.Scope())
+}
+
+func TestAgent6_HandleResponse_WithCodeBlocks(t *testing.T) {
+	a := &Agent6{}
+	response := "Here is the test:\n```bash:test.sh\n#!/bin/bash\necho ok\n```"
+	action := a.HandleResponse(response)
+	assert.Equal(t, ActionComplete, action.Type)
+}
+
+func TestAgent6_HandleResponse_NoCodeBlocks(t *testing.T) {
+	a := &Agent6{}
+	response := "I need more context to write the tests."
+	action := a.HandleResponse(response)
+	assert.Equal(t, ActionContinue, action.Type)
+	assert.Equal(t, 1, a.turnCount)
+}
+
+func TestAgent6BlackBox_SystemPrompt_ContainsPurpose(t *testing.T) {
+	dir := t.TempDir()
+	plan := TestPlanEntry{
+		Scope:    ScopeBlackBox,
+		Purpose:  "A tool that lists files",
+		BuildCmd: "go build ./...",
+		RunCmd:   "./fakeoid /tmp",
+		Tests:    []string{"Build succeeds", "Lists files correctly"},
+	}
+	a := NewAgent6BlackBox(dir, dir, plan, "# Project\n## Build\ngo build ./...\n", nil)
 	prompt := a.SystemPrompt()
 
-	assert.Contains(t, prompt, "ENRICHED_PROMPT_CONTENT")
-	assert.Contains(t, prompt, "CHANGE_PLAN_CONTENT")
-	assert.Contains(t, prompt, "TEST_OUTPUT_CONTENT")
-	assert.Contains(t, prompt, "HANDOFF_CONTENT")
+	assert.Contains(t, prompt, "Black-Box")
+	assert.Contains(t, prompt, "A tool that lists files")
+	assert.Contains(t, prompt, "go build ./...")
+	assert.Contains(t, prompt, "./fakeoid /tmp")
+	assert.Contains(t, prompt, "Build succeeds")
+	assert.Contains(t, prompt, "Lists files correctly")
+	// Should NOT contain source code references
+	assert.NotContains(t, prompt, "package agent")
 }
 
-func TestAgent6SystemPrompt_ContainsFourSections(t *testing.T) {
-	prompt := Agent6SystemPrompt("enriched", "changeplan", "testout", "handoff")
-	assert.Contains(t, prompt, "enriched")
-	assert.Contains(t, prompt, "changeplan")
-	assert.Contains(t, prompt, "testout")
-	assert.Contains(t, prompt, "handoff")
+func TestAgent6WhiteBox_SystemPrompt_ContainsCode(t *testing.T) {
+	plan := TestPlanEntry{
+		Scope:       ScopeWhiteBox,
+		SourceFiles: []string{"internal/foo.go"},
+		SourceCode:  "### internal/foo.go\n```go\npackage foo\n\nfunc Bar() {}\n```\n",
+		Tests:       []string{"Test Bar returns nil"},
+	}
+	dir := t.TempDir()
+	a := &Agent6{
+		cwd:     dir,
+		taskDir: dir,
+		scope:   ScopeWhiteBox,
+		plan:    plan,
+	}
+	prompt := a.SystemPrompt()
+
+	assert.Contains(t, prompt, "White-Box")
+	assert.Contains(t, prompt, "internal/foo.go")
+	assert.Contains(t, prompt, "package foo")
+	assert.Contains(t, prompt, "Test Bar returns nil")
 }
 
-func TestParseCorrectionVerdict(t *testing.T) {
-	tests := []struct {
-		name         string
-		input        string
-		wantApproved bool
-		wantBody     string
-	}{
-		{
-			name:         "approved simple",
-			input:        "## APPROVED\n",
-			wantApproved: true,
-			wantBody:     "",
-		},
-		{
-			name:         "approved with notes",
-			input:        "## APPROVED\nsome notes here",
-			wantApproved: true,
-			wantBody:     "",
-		},
-		{
-			name:         "approved with leading whitespace",
-			input:        "  ## APPROVED\nsome notes",
-			wantApproved: true,
-			wantBody:     "",
-		},
-		{
-			name:         "correction needed",
-			input:        "## CORRECTION NEEDED\n### Plan Drift\nSome drift",
-			wantApproved: false,
-			wantBody:     "## CORRECTION NEEDED\n### Plan Drift\nSome drift",
-		},
-		{
-			name:         "random garbage",
-			input:        "random text here",
-			wantApproved: false,
-			wantBody:     "random text here",
-		},
-		{
-			name:         "empty string",
-			input:        "",
-			wantApproved: false,
-			wantBody:     "",
-		},
-	}
+// --- Agent6FailureReport tests ---
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			approved, body := ParseCorrectionVerdict(tt.input)
-			assert.Equal(t, tt.wantApproved, approved)
-			assert.Equal(t, tt.wantBody, body)
-		})
+func TestAgent6FailureReport_BlackBox(t *testing.T) {
+	r := &Agent6FailureReport{
+		Scope:      ScopeBlackBox,
+		TestName:   "Sanity: build",
+		TestOutput: "exit code 1: compilation failed",
+		IsFatal:    true,
 	}
+	formatted := r.FormatForAgent4()
+	assert.Contains(t, formatted, "Black-Box Test Failure (FATAL)")
+	assert.Contains(t, formatted, "fundamentally broken")
+	assert.Contains(t, formatted, "Sanity: build")
+	assert.Contains(t, formatted, "compilation failed")
+}
+
+func TestAgent6FailureReport_WhiteBox(t *testing.T) {
+	r := &Agent6FailureReport{
+		Scope:      ScopeWhiteBox,
+		TestName:   "TestParseConfig",
+		Expected:   "error",
+		Actual:     "nil",
+		Location:   "internal/config_test.go:42",
+		TestOutput: "FAIL: TestParseConfig expected error got nil",
+	}
+	formatted := r.FormatForAgent4()
+	assert.Contains(t, formatted, "White-Box Test Failure")
+	assert.Contains(t, formatted, "TestParseConfig")
+	assert.Contains(t, formatted, "internal/config_test.go:42")
+	assert.Contains(t, formatted, "error")
+	assert.Contains(t, formatted, "nil")
+	assert.NotContains(t, formatted, "FATAL")
+}
+
+// --- Agent6 prompt function tests ---
+
+func TestAgent6BlackBoxSystemPrompt_ContainsAllSections(t *testing.T) {
+	prompt := Agent6BlackBoxSystemPrompt("/tmp/test", "tree", "A CLI tool", "make", "./run", []string{"Build passes", "Runs OK"}, "# README")
+	assert.Contains(t, prompt, "A CLI tool")
+	assert.Contains(t, prompt, "make")
+	assert.Contains(t, prompt, "./run")
+	assert.Contains(t, prompt, "Build passes")
+	assert.Contains(t, prompt, "Runs OK")
+	assert.Contains(t, prompt, "# README")
+}
+
+func TestAgent6WhiteBoxSystemPrompt_ContainsAllSections(t *testing.T) {
+	prompt := Agent6WhiteBoxSystemPrompt("/tmp/test", "tree", "package foo", []string{"foo.go"}, []string{"Test Foo"})
+	assert.Contains(t, prompt, "package foo")
+	assert.Contains(t, prompt, "foo.go")
+	assert.Contains(t, prompt, "Test Foo")
+}
+
+// --- TestScope constants ---
+
+func TestTestScope_Values(t *testing.T) {
+	require.Equal(t, TestScope("blackbox"), ScopeBlackBox)
+	require.Equal(t, TestScope("whitebox"), ScopeWhiteBox)
 }

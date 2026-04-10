@@ -31,7 +31,7 @@ func TestPrintPipelineSummary_AllRan(t *testing.T) {
 		{Number: 2, Name: "Prompt Engineer", Status: "success"},
 		{Number: 3, Name: "Software Architect", Status: "success"},
 		{Number: 4, Name: "Software Engineer", Status: "success"},
-		{Number: 5, Name: "QE Engineer", Status: "success"},
+		{Number: 5, Name: "QA Team Leader", Status: "success"},
 	}
 	PrintPipelineSummary(&buf, outcomes)
 	assert.Contains(t, buf.String(), "5/5 agents ran")
@@ -48,7 +48,7 @@ func TestPrintPipelineSummary_WithSkipped(t *testing.T) {
 		{Number: 2, Name: "Prompt Engineer", Status: "failed"},
 		{Number: 3, Name: "Software Architect", Status: "skipped"},
 		{Number: 4, Name: "Software Engineer", Status: "success"},
-		{Number: 5, Name: "QE Engineer", Status: "success"},
+		{Number: 5, Name: "QA Team Leader", Status: "success"},
 	}
 	PrintPipelineSummary(&buf, outcomes)
 	assert.Contains(t, buf.String(), "4/5 agents ran")
@@ -276,10 +276,16 @@ func TestShell_TriggerGoWritesTaskFile(t *testing.T) {
 				// Agent 1: generate the task prompt
 				onToken("# Task: Build a feature\n\n## Description\nBuild it.")
 			case strings.Contains(sysPrompt, "Course Corrector"):
-				// Agent 6: approve
+				// Agent 7: approve
 				onToken("## APPROVED\n\nWork matches the plan.")
-			case strings.Contains(sysPrompt, "QE Engineer"):
-				// Agent 5: produce a valid test file
+			case strings.Contains(sysPrompt, "QA Team Leader"):
+				// Agent 5: produce a test plan
+				onToken("## SCOPE: blackbox\n### PURPOSE\nA hello tool\n### BUILD\ngo build ./...\n### RUN\n./hello\n### TESTS\n- Build succeeds\n\n## SCOPE: whitebox\n### FILES\n- hello.go\n### TESTS\n- Test hello returns hello\n\n## END TEST PLAN\n")
+			case strings.Contains(sysPrompt, "Black-Box"):
+				// Agent 6.1: produce test.sh
+				onToken("```bash:test.sh\n#!/bin/bash\nset -e\ngo build ./...\necho SANITY: OK\n```")
+			case strings.Contains(sysPrompt, "White-Box"):
+				// Agent 6.2: produce test file
 				onToken("```go:hello_test.go\npackage main\n\nimport \"testing\"\n\nfunc TestHello(t *testing.T) {\n\tif hello() != \"hello\" {\n\t\tt.Fatal(\"bad\")\n\t}\n}\n```")
 			default:
 				// Agent 2/3/4: produce a valid code file
@@ -371,10 +377,16 @@ func TestShell_Agent4_Activation(t *testing.T) {
 				// Agent 1: produces complete task prompt (auto-proceed)
 				onToken("# Task: Build a feature\n\n## Description\nBuild it.\n\n## Affected Files\n- main.go\n\n## Expected Tests\n- TestMain\n\n## Acceptance Criteria\n- Compiles\n\n## Context\nN/A")
 			case strings.Contains(sysPrompt, "Course Corrector"):
-				// Agent 6: approve
+				// Agent 7: approve
 				onToken("## APPROVED\n\nWork matches the plan.")
-			case strings.Contains(sysPrompt, "QE Engineer"):
-				// Agent 5: produce a passing test
+			case strings.Contains(sysPrompt, "QA Team Leader"):
+				// Agent 5: produce a test plan
+				onToken("## SCOPE: blackbox\n### PURPOSE\nA main program\n### BUILD\ngo build ./...\n### RUN\n./testmod\n### TESTS\n- Build succeeds\n\n## SCOPE: whitebox\n### FILES\n- main.go\n### TESTS\n- Test main function exists\n\n## END TEST PLAN\n")
+			case strings.Contains(sysPrompt, "Black-Box"):
+				// Agent 6.1: produce test.sh
+				onToken("```bash:test.sh\n#!/bin/bash\nset -e\ngo build ./...\necho SANITY: OK\n```")
+			case strings.Contains(sysPrompt, "White-Box"):
+				// Agent 6.2: produce test file
 				onToken("```go:main_test.go\npackage main\n\nimport \"testing\"\n\nfunc TestMain2(t *testing.T) {}\n```\n")
 			default:
 				// Agents 2/3/4: produce a code block
@@ -442,7 +454,11 @@ func TestShell_Agent4_StreamingVisible(t *testing.T) {
 				onToken("# Task\n\nDo it.")
 			case strings.Contains(sysPrompt, "Course Corrector"):
 				onToken("## APPROVED\n\nWork matches the plan.")
-			case strings.Contains(sysPrompt, "QE Engineer"):
+			case strings.Contains(sysPrompt, "QA Team Leader"):
+				onToken("## SCOPE: blackbox\n### PURPOSE\nA hello tool\n### BUILD\ngo build ./...\n### RUN\n./hello\n### TESTS\n- Build succeeds\n\n## SCOPE: whitebox\n### FILES\n- hello.go\n### TESTS\n- Test hello works\n\n## END TEST PLAN\n")
+			case strings.Contains(sysPrompt, "Black-Box"):
+				onToken("```bash:test.sh\n#!/bin/bash\nset -e\ngo build ./...\necho SANITY: OK\n```")
+			case strings.Contains(sysPrompt, "White-Box"):
 				onToken("```go:hello_test.go\npackage main\n\nimport \"testing\"\n\nfunc TestHello(t *testing.T) {}\n```\n")
 			case strings.Contains(sysPrompt, "Software Engineer"):
 				onToken("Writing code now.\n\n```go:hello.go\npackage main\n```\n")
@@ -546,18 +562,29 @@ func TestFeedbackLoop_PassesOnFirstIteration(t *testing.T) {
 
 	// Write a valid go module and source file so go test can run
 	require.NoError(t, os.WriteFile(filepath.Join(cwd, "go.mod"), []byte("module testmod\n\ngo 1.21\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(cwd, "main.go"), []byte("package main\n\nfunc Add(a, b int) int { return a + b }\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(cwd, "main.go"), []byte("package main\n\nfunc main() {}\n\nfunc Add(a, b int) int { return a + b }\n"), 0o644))
 
-	callCount := 0
 	client := &mockClient{
 		streamFn: func(ctx context.Context, msgs []server.Message, onToken func(string)) (server.StreamResult, error) {
-			callCount++
-			if callCount == 1 {
-				// Agent 5 response: produce a test file that passes
+			sysPrompt := ""
+			if len(msgs) > 0 && msgs[0].Role == "system" {
+				sysPrompt = msgs[0].Content
+			}
+			switch {
+			case strings.Contains(sysPrompt, "QA Team Leader"):
+				// Agent 5: produce test plan
+				onToken("## SCOPE: blackbox\n### PURPOSE\nAn add tool\n### BUILD\ngo build ./...\n### RUN\n./testmod\n### TESTS\n- Build succeeds\n\n## SCOPE: whitebox\n### FILES\n- main.go\n### TESTS\n- Test Add\n\n## END TEST PLAN\n")
+			case strings.Contains(sysPrompt, "Black-Box"):
+				// Agent 6.1: test.sh
+				onToken("```bash:test.sh\n#!/bin/bash\nset -e\ngo build ./...\necho SANITY: OK\n```")
+			case strings.Contains(sysPrompt, "White-Box"):
+				// Agent 6.2: white-box tests
 				onToken("```go:main_test.go\npackage main\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) {\n\tif Add(1,2) != 3 { t.Fatal(\"wrong\") }\n}\n```\n")
-			} else {
-				// Agent 6 response: approve
+			case strings.Contains(sysPrompt, "Course Corrector"):
+				// Agent 7: approve
 				onToken("## APPROVED\n\nThe implementation matches the plan.")
+			default:
+				onToken("ok")
 			}
 			return server.StreamResult{Usage: server.Usage{TotalTokens: 100}}, nil
 		},
@@ -577,7 +604,7 @@ func TestFeedbackLoop_PassesOnFirstIteration(t *testing.T) {
 	passed, loopOutcomes, err := sh.runFeedbackLoop(context.Background(), handoffPath, filepath.Join(taskDir, "task-001.md"))
 	assert.NoError(t, err)
 	assert.True(t, passed)
-	// Find the final Agent 5 outcome
+	// Find the Agent 5 (QA Team Leader) outcome
 	var a5Status string
 	for _, o := range loopOutcomes {
 		if o.Number == 5 {
@@ -585,14 +612,14 @@ func TestFeedbackLoop_PassesOnFirstIteration(t *testing.T) {
 		}
 	}
 	assert.Equal(t, "success", a5Status)
-	// Should also have Agent 6 outcome
-	var a6Status string
+	// Should also have Agent 7 (Course Corrector) outcome
+	var a7Status string
 	for _, o := range loopOutcomes {
-		if o.Number == 6 {
-			a6Status = o.Status
+		if o.Number == 7 {
+			a7Status = o.Status
 		}
 	}
-	assert.Equal(t, "success", a6Status)
+	assert.Equal(t, "success", a7Status)
 
 	stderrStr := stderr.String()
 	assert.Contains(t, stderrStr, "Feedback Loop: Iteration 1")
@@ -615,23 +642,33 @@ func TestFeedbackLoop_RetriesOnFailure(t *testing.T) {
 
 	// Write a valid go module
 	require.NoError(t, os.WriteFile(filepath.Join(cwd, "go.mod"), []byte("module testmod\n\ngo 1.21\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(cwd, "main.go"), []byte("package main\n\nfunc Add(a, b int) int { return a + b }\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(cwd, "main.go"), []byte("package main\n\nfunc main() {}\n\nfunc Add(a, b int) int { return a + b }\n"), 0o644))
 
 	callCount := 0
 	client := &mockClient{
 		streamFn: func(ctx context.Context, msgs []server.Message, onToken func(string)) (server.StreamResult, error) {
 			callCount++
-			// Flow: Agent5(1) -> Agent6(2) -> Agent4fix(3) -> Agent5(4) -> Agent6(5, cancel)
-			// Cancel at call 6 to fail during iteration 2's Agent 6
-			if callCount > 5 {
+			sysPrompt := ""
+			if len(msgs) > 0 && msgs[0].Role == "system" {
+				sysPrompt = msgs[0].Content
+			}
+			// Flow: Agent5(plan) -> Agent6.1(bb) -> Agent6.2(wb) -> Agent7(corrector) -> Agent4(fix) -> repeat
+			// Cancel after iteration 1's Agent 4 fix + iteration 2's Agent 5
+			if callCount > 7 {
 				return server.StreamResult{}, fmt.Errorf("stream cancelled")
 			}
-			if callCount == 2 || callCount == 5 {
-				// Agent 6 response: correction needed (tests failed, so correction expected)
-				onToken("## CORRECTION NEEDED\n\nThe code needs fixes.")
-			} else {
-				// Agent 5 or Agent 4 response: produce a failing test / fix code
+			switch {
+			case strings.Contains(sysPrompt, "QA Team Leader"):
+				onToken("## SCOPE: blackbox\n### PURPOSE\nAn add tool\n### BUILD\ngo build ./...\n### RUN\n./testmod\n### TESTS\n- Build succeeds\n\n## SCOPE: whitebox\n### FILES\n- main.go\n### TESTS\n- Test Add\n\n## END TEST PLAN\n")
+			case strings.Contains(sysPrompt, "Black-Box"):
+				onToken("```bash:test.sh\n#!/bin/bash\nset -e\ngo build ./...\necho SANITY: OK\n```")
+			case strings.Contains(sysPrompt, "White-Box"):
 				onToken("```go:main_test.go\npackage main\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) {\n\tif Add(1,2) != 999 { t.Fatal(\"wrong\") }\n}\n```\n")
+			case strings.Contains(sysPrompt, "Course Corrector"):
+				onToken("## CORRECTION NEEDED\n\nThe code needs fixes.")
+			default:
+				// Agent 4 fix
+				onToken("```go:main.go\npackage main\n\nfunc Add(a, b int) int { return a + b }\n```\n")
 			}
 			return server.StreamResult{Usage: server.Usage{TotalTokens: 100}}, nil
 		},
@@ -672,21 +709,32 @@ func TestFeedbackLoop_PrintsTransitions(t *testing.T) {
 	require.NoError(t, os.WriteFile(taskFilePath, []byte("# Task\n\nBuild it."), 0o644))
 
 	require.NoError(t, os.WriteFile(filepath.Join(cwd, "go.mod"), []byte("module testmod\n\ngo 1.21\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(cwd, "main.go"), []byte("package main\n\nfunc Add(a, b int) int { return a + b }\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(cwd, "main.go"), []byte("package main\n\nfunc main() {}\n\nfunc Add(a, b int) int { return a + b }\n"), 0o644))
 
 	callCount := 0
 	client := &mockClient{
 		streamFn: func(ctx context.Context, msgs []server.Message, onToken func(string)) (server.StreamResult, error) {
 			callCount++
-			// Flow: Agent5(1) -> Agent6(2) -> Agent4(3) -> cancel at Agent5(4)
-			if callCount > 3 {
+			sysPrompt := ""
+			if len(msgs) > 0 && msgs[0].Role == "system" {
+				sysPrompt = msgs[0].Content
+			}
+			// Flow: Agent5(plan) -> Agent6.1(bb) -> Agent6.2(wb) -> Agent7(corrector) -> Agent4(fix) -> cancel
+			if callCount > 5 {
 				return server.StreamResult{}, fmt.Errorf("stream cancelled")
 			}
-			if callCount == 2 {
-				// Agent 6 response
-				onToken("## CORRECTION NEEDED\n\nNeeds fixes.")
-			} else {
+			switch {
+			case strings.Contains(sysPrompt, "QA Team Leader"):
+				onToken("## SCOPE: blackbox\n### PURPOSE\nAn add tool\n### BUILD\ngo build ./...\n### RUN\n./testmod\n### TESTS\n- Build succeeds\n\n## SCOPE: whitebox\n### FILES\n- main.go\n### TESTS\n- Test Add\n\n## END TEST PLAN\n")
+			case strings.Contains(sysPrompt, "Black-Box"):
+				onToken("```bash:test.sh\n#!/bin/bash\nset -e\ngo build ./...\necho SANITY: OK\n```")
+			case strings.Contains(sysPrompt, "White-Box"):
 				onToken("```go:main_test.go\npackage main\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) {\n\tif Add(1,2) != 999 { t.Fatal(\"wrong\") }\n}\n```\n")
+			case strings.Contains(sysPrompt, "Course Corrector"):
+				onToken("## CORRECTION NEEDED\n\nNeeds fixes.")
+			default:
+				// Agent 4 fix
+				onToken("```go:main.go\npackage main\n\nfunc Add(a, b int) int { return a + b }\n```\n")
 			}
 			return server.StreamResult{Usage: server.Usage{TotalTokens: 100}}, nil
 		},
@@ -707,9 +755,9 @@ func TestFeedbackLoop_PrintsTransitions(t *testing.T) {
 
 	stderrStr := stderr.String()
 	// Agent 5 transition in each iteration
-	assert.Contains(t, stderrStr, "Agent 5: QE Engineer")
-	// Agent 6 transition
-	assert.Contains(t, stderrStr, "Agent 6: Course Corrector")
+	assert.Contains(t, stderrStr, "Agent 5: QA Team Leader")
+	// Agent 7 transition
+	assert.Contains(t, stderrStr, "Agent 7: Course Corrector")
 	// Agent 4 transition for fix attempts
 	assert.Contains(t, stderrStr, "Agent 4: Software Engineer")
 }
@@ -739,18 +787,26 @@ func TestPipeline_ReturnsToAgent1AfterCompletion(t *testing.T) {
 				onToken("# Change Plan\n\n## Changes\n### CREATE main.go\n")
 				return server.StreamResult{Usage: server.Usage{TotalTokens: 100}}, nil
 			case callCount == 4:
-				// Agent 4: code with code blocks
-				onToken("```go:main.go\npackage main\n\nfunc Add(a, b int) int { return a + b }\n```\n")
+				// Agent 4: code with code blocks (must include main() for go build)
+				onToken("```go:main.go\npackage main\n\nfunc main() {}\n\nfunc Add(a, b int) int { return a + b }\n```\n")
 				return server.StreamResult{Usage: server.Usage{TotalTokens: 100}}, nil
 			case callCount == 5:
-				// Agent 5: tests
-				onToken("```go:main_test.go\npackage main\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) {\n\tif Add(1,2) != 3 { t.Fatal(\"wrong\") }\n}\n```\n")
+				// Agent 5: QA Team Leader produces test plan
+				onToken("## SCOPE: blackbox\n### PURPOSE\nAn add tool\n### BUILD\ngo build ./...\n### RUN\n./testmod\n### TESTS\n- Build succeeds\n\n## SCOPE: whitebox\n### FILES\n- main.go\n### TESTS\n- Test Add returns correct sum\n\n## END TEST PLAN\n")
 				return server.StreamResult{Usage: server.Usage{TotalTokens: 100}}, nil
 			case callCount == 6:
-				// Agent 6: approve
-				onToken("## APPROVED\n\nWork matches the plan.")
+				// Agent 6.1: black-box test.sh
+				onToken("```bash:test.sh\n#!/bin/bash\nset -e\ngo build ./...\necho SANITY: OK\n```")
 				return server.StreamResult{Usage: server.Usage{TotalTokens: 100}}, nil
 			case callCount == 7:
+				// Agent 6.2: white-box tests
+				onToken("```go:main_test.go\npackage main\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) {\n\tif Add(1,2) != 3 { t.Fatal(\"wrong\") }\n}\n```\n")
+				return server.StreamResult{Usage: server.Usage{TotalTokens: 100}}, nil
+			case callCount == 8:
+				// Agent 7: approve
+				onToken("## APPROVED\n\nWork matches the plan.")
+				return server.StreamResult{Usage: server.Usage{TotalTokens: 100}}, nil
+			case callCount == 9:
 				// Back to Agent 1 after pipeline
 				onToken("Ready for next task.")
 				return server.StreamResult{Usage: server.Usage{TotalTokens: 100}}, nil
@@ -783,15 +839,15 @@ func TestPipeline_ReturnsToAgent1AfterCompletion(t *testing.T) {
 	_, isAgent1 := runner.Active().(*agent.Agent1)
 	assert.True(t, isAgent1, "should be Agent 1 after pipeline completes")
 
-	// Should have had at least 7 calls (Agent1, Agent2, Agent3, Agent4, Agent5, Agent6, Agent1 again)
-	assert.GreaterOrEqual(t, callCount, 7)
+	// Should have had at least 9 calls (Agent1, Agent2, Agent3, Agent4, Agent5, Agent6.1, Agent6.2, Agent7, Agent1 again)
+	assert.GreaterOrEqual(t, callCount, 9)
 
 	stderrStr := stderr.String()
 	assert.Contains(t, stderrStr, "Pipeline Complete: PASS")
 }
 
-func TestAgent5Phase_WritesTestFiles(t *testing.T) {
-	// Verify runAgent5Phase writes test files to disk via ParseCodeBlocks + WriteCodeBlocks.
+func TestAgent5Phase_ProducesTestPlan(t *testing.T) {
+	// Verify runAgent5Phase (QA Team Leader) produces a structured test plan.
 	cwd := t.TempDir()
 	taskDir := filepath.Join(cwd, ".fakeoid", "tasks")
 
@@ -801,11 +857,12 @@ func TestAgent5Phase_WritesTestFiles(t *testing.T) {
 	require.NoError(t, os.WriteFile(handoffPath, []byte(handoffContent), 0o644))
 
 	require.NoError(t, os.WriteFile(filepath.Join(cwd, "go.mod"), []byte("module testmod\n\ngo 1.21\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(cwd, "main.go"), []byte("package main\n\nfunc Add(a, b int) int { return a + b }\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(cwd, "main.go"), []byte("package main\n\nfunc main() {}\n\nfunc Add(a, b int) int { return a + b }\n"), 0o644))
 
 	client := &mockClient{
 		streamFn: func(ctx context.Context, msgs []server.Message, onToken func(string)) (server.StreamResult, error) {
-			onToken("```go:main_test.go\npackage main\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) {\n\tif Add(1,2) != 3 { t.Fatal(\"wrong\") }\n}\n```\n")
+			plan := "## SCOPE: blackbox\n### PURPOSE\nA simple add tool\n### BUILD\ngo build ./...\n### RUN\n./testmod\n### TESTS\n- Build succeeds\n\n## SCOPE: whitebox\n### FILES\n- main.go\n### TESTS\n- Test Add returns correct sum\n\n## END TEST PLAN\n"
+			onToken(plan)
 			return server.StreamResult{Usage: server.Usage{TotalTokens: 100}}, nil
 		},
 	}
@@ -821,14 +878,13 @@ func TestAgent5Phase_WritesTestFiles(t *testing.T) {
 	sh.sandbox = sb
 	defer sh.Close()
 
-	testOutput, passed, runErr := sh.runAgent5Phase(context.Background(), handoffPath, "task-001.md", 1)
+	entries, runErr := sh.runAgent5Phase(context.Background(), handoffPath, "task-001.md", 1)
 	assert.NoError(t, runErr)
-	assert.True(t, passed)
-	assert.Contains(t, testOutput, "PASS")
-
-	// Test file should exist on disk
-	_, statErr := os.Stat(filepath.Join(cwd, "main_test.go"))
-	assert.NoError(t, statErr, "test file should be written to disk")
+	require.Len(t, entries, 2)
+	assert.Equal(t, agent.ScopeBlackBox, entries[0].Scope)
+	assert.Equal(t, agent.ScopeWhiteBox, entries[1].Scope)
+	assert.Contains(t, entries[0].Purpose, "add tool")
+	assert.Contains(t, entries[1].SourceFiles, "main.go")
 }
 
 func TestAgent4FixPhase_InjectsFailureOutput(t *testing.T) {
@@ -1006,25 +1062,41 @@ func TestPipeline_SwitchAgentClearsHistory(t *testing.T) {
 					systemPromptContains: "Software Engineer",
 					msgCount:             len(msgs),
 				})
-				onToken("```go:main.go\npackage main\n\nfunc Add(a, b int) int { return a + b }\n```\n")
+				onToken("```go:main.go\npackage main\n\nfunc main() {}\n\nfunc Add(a, b int) int { return a + b }\n```\n")
 				return server.StreamResult{Usage: server.Usage{TotalTokens: 100}}, nil
 			case 6:
-				// Agent 5 (QE Engineer) -- first call after SwitchAgent
+				// Agent 5 (QA Team Leader) -- first call after SwitchAgent
 				agentCalls = append(agentCalls, agentCall{
-					systemPromptContains: "QE",
+					systemPromptContains: "QA Team Leader",
+					msgCount:             len(msgs),
+				})
+				onToken("## SCOPE: blackbox\n### PURPOSE\nAn add tool\n### BUILD\ngo build ./...\n### RUN\n./testmod\n### TESTS\n- Build succeeds\n\n## SCOPE: whitebox\n### FILES\n- main.go\n### TESTS\n- Test Add\n\n## END TEST PLAN\n")
+				return server.StreamResult{Usage: server.Usage{TotalTokens: 100}}, nil
+			case 7:
+				// Agent 6.1 (Black-Box) -- first call after SwitchAgent
+				agentCalls = append(agentCalls, agentCall{
+					systemPromptContains: "Black-Box",
+					msgCount:             len(msgs),
+				})
+				onToken("```bash:test.sh\n#!/bin/bash\nset -e\ngo build ./...\necho SANITY: OK\n```")
+				return server.StreamResult{Usage: server.Usage{TotalTokens: 100}}, nil
+			case 8:
+				// Agent 6.2 (White-Box) -- first call after SwitchAgent
+				agentCalls = append(agentCalls, agentCall{
+					systemPromptContains: "White-Box",
 					msgCount:             len(msgs),
 				})
 				onToken("```go:main_test.go\npackage main\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) {\n\tif Add(1,2) != 3 { t.Fatal(\"wrong\") }\n}\n```\n")
 				return server.StreamResult{Usage: server.Usage{TotalTokens: 100}}, nil
-			case 7:
-				// Agent 6 (Course Corrector) -- first call after SwitchAgent
+			case 9:
+				// Agent 7 (Course Corrector) -- first call after SwitchAgent
 				agentCalls = append(agentCalls, agentCall{
 					systemPromptContains: "Course Corrector",
 					msgCount:             len(msgs),
 				})
 				onToken("## APPROVED\n\nWork matches the plan.")
 				return server.StreamResult{Usage: server.Usage{TotalTokens: 100}}, nil
-			case 8:
+			case 10:
 				// Back to Agent 1
 				onToken("Ready.")
 				return server.StreamResult{Usage: server.Usage{TotalTokens: 100}}, nil
@@ -1051,9 +1123,9 @@ func TestPipeline_SwitchAgentClearsHistory(t *testing.T) {
 	err = sh.Run(context.Background())
 	assert.NoError(t, err)
 
-	// SwitchAgent must be called for Agent 2, 3, 4, 5, and 6 (5 transitions)
+	// SwitchAgent must be called for Agent 2, 3, 4, 5, 6.1, 6.2, and 7 (7 transitions)
 	assert.GreaterOrEqual(t, len(agentCalls), 5,
-		"SwitchAgent must be called for Agent 2, 3, 4, 5, and 6 transitions")
+		"SwitchAgent must be called for Agent 2, 3, 4, 5, 6.1, 6.2, and 7 transitions")
 
 	// Each agent's first call should have a fresh history (system prompt + user message = 2 msgs)
 	for i, ac := range agentCalls {
@@ -1075,7 +1147,7 @@ func TestPrintHistoryDetail_FullPipeline(t *testing.T) {
 			{Number: 2, Name: "Prompt Engineer", Status: "success"},
 			{Number: 3, Name: "Software Architect", Status: "failed"},
 			{Number: 4, Name: "Software Engineer", Status: "success"},
-			{Number: 5, Name: "QE Engineer", Status: "skipped"},
+			{Number: 5, Name: "QA Team Leader", Status: "skipped"},
 		},
 	}
 	PrintHistoryDetail(&buf, "implement-auth", fm)
@@ -1120,7 +1192,7 @@ func TestHistoryDetail_ShowsAgentOutcomes(t *testing.T) {
 			{Number: 2, Name: "Prompt Engineer", Status: "success"},
 			{Number: 3, Name: "Software Architect", Status: "skipped"},
 			{Number: 4, Name: "Software Engineer", Status: "success"},
-			{Number: 5, Name: "QE Engineer", Status: "failed"},
+			{Number: 5, Name: "QA Team Leader", Status: "failed"},
 		},
 	}
 	taskContent, err := state.InjectFrontmatter(fm, "# Task\n\nBuild something.")
@@ -1165,7 +1237,7 @@ func TestHistoryDetail_ShowsAgentOutcomes(t *testing.T) {
 	assert.Contains(t, output, "Task: task-001")
 	assert.Contains(t, output, "Outcome: success")
 	assert.Contains(t, output, "Systems Engineer")
-	assert.Contains(t, output, "QE Engineer")
+	assert.Contains(t, output, "QA Team Leader")
 	assert.Contains(t, output, "X failed")
 	assert.Contains(t, output, "- skipped")
 }
@@ -1257,7 +1329,7 @@ func TestResumeLastTask_FromHandoff(t *testing.T) {
 
 	// Set up go.mod and source file
 	require.NoError(t, os.WriteFile(filepath.Join(cwd, "go.mod"), []byte("module testmod\n\ngo 1.21\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(cwd, "main.go"), []byte("package main\n\nfunc Add(a, b int) int { return a + b }\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(cwd, "main.go"), []byte("package main\n\nfunc main() {}\n\nfunc Add(a, b int) int { return a + b }\n"), 0o644))
 
 	// Write task file
 	taskFile := filepath.Join(taskDir, "001-add-feature.md")
@@ -1285,10 +1357,16 @@ func TestResumeLastTask_FromHandoff(t *testing.T) {
 				sysPrompt = msgs[0].Content
 			}
 			if strings.Contains(sysPrompt, "Course Corrector") {
-				// Agent 6: approve
+				// Agent 7: approve
 				onToken("## APPROVED\n\nWork matches the plan.")
+			} else if strings.Contains(sysPrompt, "QA Team Leader") {
+				// Agent 5: produce test plan
+				onToken("## SCOPE: blackbox\n### PURPOSE\nAn add tool\n### BUILD\ngo build ./...\n### RUN\n./testmod\n### TESTS\n- Build succeeds\n\n## SCOPE: whitebox\n### FILES\n- main.go\n### TESTS\n- Test Add\n\n## END TEST PLAN\n")
+			} else if strings.Contains(sysPrompt, "Black-Box") {
+				// Agent 6.1: test.sh
+				onToken("```bash:test.sh\n#!/bin/bash\nset -e\ngo build ./...\necho SANITY: OK\n```")
 			} else {
-				// Agent 5: produce a passing test
+				// Agent 6.2: white-box tests
 				onToken("```go:main_test.go\npackage main\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) {\n\tif Add(1,2) != 3 { t.Fatal(\"wrong\") }\n}\n```\n")
 			}
 			return server.StreamResult{Usage: server.Usage{TotalTokens: 100}}, nil
@@ -1335,5 +1413,5 @@ func TestDetectResumeStage(t *testing.T) {
 
 	// Handoff exists → Agent 5
 	require.NoError(t, os.WriteFile(filepath.Join(dir, base+"-handoff.md"), []byte("x"), 0o644))
-	assert.Equal(t, "Agent 5: QE Engineer", detectResumeStage(dir, base))
+	assert.Equal(t, "Agent 5: QA Team Leader", detectResumeStage(dir, base))
 }

@@ -127,7 +127,7 @@ func TestRebuildFromTaskFiles(t *testing.T) {
 		Timestamp:   time.Date(2026, 3, 15, 10, 0, 0, 0, time.UTC),
 		SessionID:   "20260315-100000",
 		Outcome:     "success",
-		Agents:      []AgentOutcome{{Number: 1, Name: "Systems Engineer", Status: "success"}, {Number: 4, Name: "Software Engineer", Status: "success"}, {Number: 5, Name: "QE Engineer", Status: "success"}},
+		Agents:      []AgentOutcome{{Number: 1, Name: "Systems Engineer", Status: "success"}, {Number: 4, Name: "Software Engineer", Status: "success"}, {Number: 5, Name: "QA Team Leader", Status: "success"}},
 		DurationSec: 30,
 	}
 	fm2 := TaskFrontmatter{

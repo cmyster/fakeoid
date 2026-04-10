@@ -13,9 +13,31 @@ import (
 	"github.com/cmyster/fakeoid/internal/sandbox"
 )
 
-// Agent5 implements the Agent interface for the QE Engineer role.
-// It reads a handoff file from Agent 4, verifies the code builds, runs smoke
-// tests against task requirements, and writes unit tests.
+// TestScope identifies the type of testing a QA sub-agent should perform.
+type TestScope string
+
+const (
+	// ScopeBlackBox means sanity/smoke testing -- no source code, only intent.
+	ScopeBlackBox TestScope = "blackbox"
+	// ScopeWhiteBox means unit/integration testing -- source code, no intent.
+	ScopeWhiteBox TestScope = "whitebox"
+)
+
+// TestPlanEntry represents one sub-agent's testing assignment from the QA Team Leader.
+type TestPlanEntry struct {
+	Scope       TestScope // blackbox or whitebox
+	Purpose     string    // what the code does (for blackbox) -- empty for whitebox
+	BuildCmd    string    // build command (for blackbox)
+	RunCmd      string    // run command (for blackbox)
+	Tests       []string  // list of test descriptions
+	SourceFiles []string  // file paths to test (for whitebox) -- empty for blackbox
+	SourceCode  string    // actual source content (for whitebox) -- empty for blackbox
+}
+
+// Agent5 implements the Agent interface for the QA Team Leader role.
+// It reads a handoff file from Agent 4, analyzes the scope of changes,
+// and produces a structured test plan that splits work into black-box
+// and white-box sub-agents (Agent 6 instances).
 type Agent5 struct {
 	cwd              string
 	taskDir          string
@@ -25,15 +47,15 @@ type Agent5 struct {
 	handoffContent   string
 	sourceFiles      string
 	readmeContent    string
-	taskRequirements string // enriched prompt or task description for smoke testing
+	taskRequirements string // enriched prompt or task description
 	sb               *sandbox.Sandbox
 }
 
-// NewAgent5 creates a new Agent 5 (QE Engineer) with the given working directory,
+// NewAgent5 creates a new Agent 5 (QA Team Leader) with the given working directory,
 // task directory, handoff file path, sandbox, README content, and task requirements.
 // It scans the file tree, reads the handoff content, extracts referenced source
 // files, and reads them from disk. taskRequirements is the enriched prompt or raw
-// task description used for smoke testing (may be empty).
+// task description used for understanding the task scope.
 func NewAgent5(cwd, taskDir, handoffFile string, sb *sandbox.Sandbox, readmeContent, taskRequirements string) *Agent5 {
 	tree, _ := ScanFileTree(cwd, 3, 0, nil)
 
@@ -68,25 +90,128 @@ func NewAgent5(cwd, taskDir, handoffFile string, sb *sandbox.Sandbox, readmeCont
 func (a *Agent5) Number() int { return 5 }
 
 // Name returns the human-readable agent name.
-func (a *Agent5) Name() string { return "QE Engineer" }
+func (a *Agent5) Name() string { return "QA Team Leader" }
 
 // SystemPrompt returns the system prompt for Agent 5, including CWD, file tree,
 // handoff content, source file contents, README build instructions, and task
-// requirements for smoke testing.
+// requirements for planning the test strategy.
 func (a *Agent5) SystemPrompt() string {
 	return Agent5SystemPrompt(a.cwd, a.fileTree, a.handoffContent, a.sourceFiles, a.readmeContent, a.taskRequirements)
 }
 
 // HandleResponse processes an LLM response. It increments the turn counter and
-// checks for code blocks. Returns ActionComplete if code blocks are found or
-// max turns reached; otherwise returns ActionContinue for multi-turn conversation.
+// checks for the test plan markers. Returns ActionComplete if a complete test
+// plan is found or max turns reached; otherwise returns ActionContinue.
 func (a *Agent5) HandleResponse(response string) Action {
 	a.turnCount++
-	blocks := ParseCodeBlocks(response)
-	if len(blocks) > 0 {
+	if strings.Contains(response, "## END TEST PLAN") {
 		return Action{Type: ActionComplete}
 	}
 	return Action{Type: ActionContinue}
+}
+
+// ParseTestPlan parses the structured test plan output from Agent 5.
+// It extracts blackbox and whitebox sections with their test descriptions,
+// source file paths, purpose, and build/run commands.
+func ParseTestPlan(planText string) []TestPlanEntry {
+	var entries []TestPlanEntry
+	var current *TestPlanEntry
+	inSection := ""
+
+	for _, line := range strings.Split(planText, "\n") {
+		trimmed := strings.TrimSpace(line)
+
+		// Detect scope headers
+		lower := strings.ToLower(trimmed)
+		if strings.HasPrefix(lower, "## scope: blackbox") {
+			if current != nil {
+				entries = append(entries, *current)
+			}
+			current = &TestPlanEntry{Scope: ScopeBlackBox}
+			inSection = ""
+			continue
+		}
+		if strings.HasPrefix(lower, "## scope: whitebox") {
+			if current != nil {
+				entries = append(entries, *current)
+			}
+			current = &TestPlanEntry{Scope: ScopeWhiteBox}
+			inSection = ""
+			continue
+		}
+
+		if current == nil {
+			continue
+		}
+
+		// Detect sub-section headers
+		if strings.HasPrefix(lower, "### purpose") {
+			inSection = "purpose"
+			continue
+		}
+		if strings.HasPrefix(lower, "### build") {
+			inSection = "build"
+			continue
+		}
+		if strings.HasPrefix(lower, "### run") {
+			inSection = "run"
+			continue
+		}
+		if strings.HasPrefix(lower, "### tests") {
+			inSection = "tests"
+			continue
+		}
+		if strings.HasPrefix(lower, "### files") {
+			inSection = "files"
+			continue
+		}
+
+		// End of plan
+		if strings.HasPrefix(lower, "## end test plan") {
+			if current != nil {
+				entries = append(entries, *current)
+				current = nil
+			}
+			break
+		}
+
+		// Skip empty lines and other headers
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+
+		// Parse content based on current section
+		switch inSection {
+		case "purpose":
+			if current.Purpose != "" {
+				current.Purpose += " "
+			}
+			current.Purpose += trimmed
+		case "build":
+			if current.BuildCmd == "" {
+				current.BuildCmd = trimmed
+			}
+		case "run":
+			if current.RunCmd == "" {
+				current.RunCmd = trimmed
+			}
+		case "tests":
+			if strings.HasPrefix(trimmed, "- ") {
+				current.Tests = append(current.Tests, strings.TrimPrefix(trimmed, "- "))
+			}
+		case "files":
+			if strings.HasPrefix(trimmed, "- ") {
+				current.SourceFiles = append(current.SourceFiles, strings.TrimPrefix(trimmed, "- "))
+			}
+		}
+	}
+
+	// Flush last entry
+	if current != nil {
+		entries = append(entries, *current)
+	}
+
+	return entries
 }
 
 // ExtractPackages parses handoff markdown content to extract unique Go package
@@ -417,9 +542,9 @@ func RunBuildAndVerify(ctx context.Context, cwd string, readmeContent string, li
 	return captured.String(), passed, nil
 }
 
-// RunTestScript runs test.sh if Agent 5 created one, otherwise falls back to
+// RunTestScript runs test.sh if Agent 6 created one, otherwise falls back to
 // RunBuildAndVerify. test.sh is the preferred verification method because it
-// contains build + run + output checks written by Agent 5 for this specific project.
+// contains build + run + output checks written by Agent 6 for this specific project.
 func RunTestScript(ctx context.Context, cwd string, readmeContent string, liveOut io.Writer) (string, bool, error) {
 	testScript := filepath.Join(cwd, "test.sh")
 	if fileExists(testScript) {

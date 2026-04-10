@@ -33,7 +33,7 @@ func TestAgent5_Number(t *testing.T) {
 
 func TestAgent5_Name(t *testing.T) {
 	a := &Agent5{}
-	assert.Equal(t, "QE Engineer", a.Name())
+	assert.Equal(t, "QA Team Leader", a.Name())
 }
 
 func TestAgent5_SystemPrompt_ContainsContext(t *testing.T) {
@@ -56,32 +56,113 @@ func TestAgent5_SystemPrompt_ContainsContext(t *testing.T) {
 	prompt := a.SystemPrompt()
 
 	assert.Contains(t, prompt, dir)
-	assert.Contains(t, prompt, "QE Engineer")
+	assert.Contains(t, prompt, "QA Team Leader")
 	assert.Contains(t, prompt, "Handoff")
 	assert.Contains(t, prompt, "package agent")
 }
 
-func TestAgent5_HandleResponse_WithCodeBlocks(t *testing.T) {
+func TestAgent5_HandleResponse_WithEndTestPlan(t *testing.T) {
 	a := &Agent5{}
-	response := "Here are the tests:\n```go:internal/agent/foo_test.go\npackage agent\n\nimport \"testing\"\n\nfunc TestFoo(t *testing.T) {}\n```"
+	response := "## SCOPE: blackbox\n### PURPOSE\nA CLI tool\n### BUILD\ngo build ./...\n### RUN\n./tool\n### TESTS\n- Build succeeds\n\n## SCOPE: whitebox\n### FILES\n- internal/foo.go\n### TESTS\n- Test Foo returns bar\n\n## END TEST PLAN"
 	action := a.HandleResponse(response)
 	assert.Equal(t, ActionComplete, action.Type)
 }
 
-func TestAgent5_HandleResponse_NoCodeBlocks(t *testing.T) {
+func TestAgent5_HandleResponse_NoEndMarker(t *testing.T) {
 	a := &Agent5{}
-	response := "I need to understand the code structure better before writing tests."
+	response := "I need to understand the code structure better before producing a test plan."
 	action := a.HandleResponse(response)
 	assert.Equal(t, ActionContinue, action.Type)
 	assert.Equal(t, 1, a.turnCount)
 }
 
-func TestAgent5_HandleResponse_ContinuesWithoutBlocks(t *testing.T) {
-	a := &Agent5{turnCount: 10}
-	// No code blocks -- keeps going regardless of turn count
-	response := "Still analyzing the code..."
-	action := a.HandleResponse(response)
-	assert.Equal(t, ActionContinue, action.Type)
+// --- ParseTestPlan tests ---
+
+func TestParseTestPlan_FullPlan(t *testing.T) {
+	plan := `# Test Plan
+
+## SCOPE: blackbox
+### PURPOSE
+A CLI tool that lists files in a directory.
+### BUILD
+go build ./...
+### RUN
+./fakeoid /tmp
+### TESTS
+- Verify build succeeds with exit code 0
+- Verify running with --help produces usage output
+- Verify listing a directory shows files
+
+## SCOPE: whitebox
+### FILES
+- internal/agent/foo.go
+- internal/agent/bar.go
+### TESTS
+- Test ParseConfig with empty input returns error
+- Test HandleRequest with valid payload returns 200
+
+## END TEST PLAN`
+
+	entries := ParseTestPlan(plan)
+	require.Len(t, entries, 2)
+
+	// Blackbox entry
+	bb := entries[0]
+	assert.Equal(t, ScopeBlackBox, bb.Scope)
+	assert.Contains(t, bb.Purpose, "CLI tool")
+	assert.Equal(t, "go build ./...", bb.BuildCmd)
+	assert.Equal(t, "./fakeoid /tmp", bb.RunCmd)
+	assert.Len(t, bb.Tests, 3)
+	assert.Empty(t, bb.SourceFiles)
+
+	// Whitebox entry
+	wb := entries[1]
+	assert.Equal(t, ScopeWhiteBox, wb.Scope)
+	assert.Empty(t, wb.Purpose)
+	assert.Len(t, wb.SourceFiles, 2)
+	assert.Contains(t, wb.SourceFiles, "internal/agent/foo.go")
+	assert.Len(t, wb.Tests, 2)
+}
+
+func TestParseTestPlan_BlackboxOnly(t *testing.T) {
+	plan := `## SCOPE: blackbox
+### PURPOSE
+Simple script
+### BUILD
+make
+### RUN
+./run.sh
+### TESTS
+- Build passes
+
+## SCOPE: whitebox
+### FILES
+### TESTS
+- (skipped: no testable internal logic)
+
+## END TEST PLAN`
+
+	entries := ParseTestPlan(plan)
+	require.Len(t, entries, 2)
+	assert.Equal(t, ScopeBlackBox, entries[0].Scope)
+	assert.Equal(t, ScopeWhiteBox, entries[1].Scope)
+}
+
+func TestParseTestPlan_Empty(t *testing.T) {
+	entries := ParseTestPlan("")
+	assert.Empty(t, entries)
+}
+
+func TestParseTestPlan_NoEndMarker(t *testing.T) {
+	plan := `## SCOPE: blackbox
+### PURPOSE
+A tool
+### TESTS
+- Build passes`
+
+	entries := ParseTestPlan(plan)
+	require.Len(t, entries, 1)
+	assert.Equal(t, ScopeBlackBox, entries[0].Scope)
 }
 
 // --- ExtractPackages tests ---
