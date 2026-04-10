@@ -76,7 +76,7 @@ func TestCachedModelInfoFromConfig(t *testing.T) {
 }
 
 func TestCachedModelInfoEmptyConfig(t *testing.T) {
-	cfg := &ModelConfig{}
+	cfg := &ModelConfig{ModelPath: filepath.Join(t.TempDir(), "nonexistent.gguf")}
 	_, _, exists, err := CachedModelInfo(cfg)
 	assert.NoError(t, err)
 	assert.False(t, exists)

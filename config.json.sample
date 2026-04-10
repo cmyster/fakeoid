@@ -22,8 +22,8 @@
   // --- Server ---
   // Port for the llama-server HTTP API
   "port": 8080,
-  // Context window size in tokens
-  "ctx_size": 8192,
+  // Context window size in tokens (default 32768 = 32K context)
+  "ctx_size": 32768,
   // Number of GPU layers to offload (empty or "999" = auto-detect from VRAM, or set manually)
   "gpu_layers": "999",
   // Flash attention mode ("on" or "off")
@@ -32,10 +32,10 @@
   "host": "127.0.0.1",
   // Maximum lines kept in the server log buffer
   "log_buffer_max": 200,
-  // Percentage of GPU compute units to use (10-100, default 60 = leave headroom for desktop)
-  "gpu_compute_pct": 60,
-  // Maximum percentage of GPU VRAM allocatable per request (10-100, default 80 = reserve 20% for system)
-  "gpu_max_alloc_pct": 80,
+  // Percentage of GPU compute units to use (10-100, default 90 = near-idle desktop, no competing GPU compute workloads)
+  "gpu_compute_pct": 90,
+  // Maximum percentage of GPU VRAM allocatable per request (10-100, default 95 = no competing GPU consumers; 5% OS/driver reserve)
+  "gpu_max_alloc_pct": 95,
 
   // --- Timeouts ---
   // Seconds to wait after SIGTERM before sending SIGKILL
