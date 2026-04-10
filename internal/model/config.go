@@ -95,18 +95,27 @@ func (c *ModelConfig) EffectiveCtxSize() int {
 	return c.CtxSize
 }
 
-// EffectiveModelRepo returns the configured model repo.
+// EffectiveModelRepo returns the configured model repo, or the default Gemma repo.
 func (c *ModelConfig) EffectiveModelRepo() string {
+	if c.ModelRepo == "" {
+		return "bartowski/google_gemma-4-31B-it-GGUF"
+	}
 	return c.ModelRepo
 }
 
-// EffectiveModelFile returns the configured model file.
+// EffectiveModelFile returns the configured model file, or the default Gemma GGUF.
 func (c *ModelConfig) EffectiveModelFile() string {
+	if c.ModelFile == "" {
+		return "google_gemma-4-31B-it-Q4_K_M.gguf"
+	}
 	return c.ModelFile
 }
 
-// EffectiveModelURL returns the configured model URL.
+// EffectiveModelURL returns the configured model URL, or the default HuggingFace URL.
 func (c *ModelConfig) EffectiveModelURL() string {
+	if c.ModelURL == "" {
+		return "https://huggingface.co/bartowski/google_gemma-4-31B-it-GGUF/resolve/main/google_gemma-4-31B-it-Q4_K_M.gguf"
+	}
 	return c.ModelURL
 }
 
@@ -115,44 +124,54 @@ func (c *ModelConfig) EffectiveModelHash() string {
 	return c.ModelHash
 }
 
-// EffectiveModelSize returns the configured model size in bytes.
+// EffectiveModelSize returns the configured model size in bytes, or the default (~19.6GB).
 func (c *ModelConfig) EffectiveModelSize() int64 {
+	if c.ModelSize == 0 {
+		return 19598483328
+	}
 	return c.ModelSize
 }
 
-// EffectiveModelName returns the configured model name.
+// EffectiveModelName returns the configured model name, or the default Gemma name.
 func (c *ModelConfig) EffectiveModelName() string {
+	if c.ModelName == "" {
+		return "Gemma-4-31B-Q4_K_M"
+	}
 	return c.ModelName
 }
 
-// EffectiveModelPath returns the configured model path, or derives it from ModelFile.
+// EffectiveModelPath returns the configured model path, or derives it from EffectiveModelFile.
 func (c *ModelConfig) EffectiveModelPath() string {
 	if c.ModelPath != "" {
 		return c.ModelPath
 	}
-	if c.ModelFile != "" {
+	if f := c.EffectiveModelFile(); f != "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			home = "."
 		}
-		return filepath.Join(home, ".fakeoid", "models", c.ModelFile)
+		return filepath.Join(home, ".fakeoid", "models", f)
 	}
 	return ""
 }
 
-// ValidateModelIdentity returns an error if required model fields are missing.
-// At minimum, model_file and model_name must be set in config.json.
+// ValidateModelIdentity returns an error if required model fields are missing
+// after applying defaults. This should always pass with built-in defaults.
 func (c *ModelConfig) ValidateModelIdentity() error {
-	if c.ModelFile == "" {
+	if c.EffectiveModelFile() == "" {
 		return errors.New("model_file is required in config.json (e.g. \"google_gemma-4-31B-it-Q4_K_M.gguf\")")
 	}
-	if c.ModelName == "" {
+	if c.EffectiveModelName() == "" {
 		return errors.New("model_name is required in config.json (e.g. \"Gemma-4-31B-Q4_K_M\")")
 	}
 	return nil
 }
 
 // EffectiveGPULayers returns the configured GPU layers or "999".
+// NOTE: root.go intentionally passes the raw GPULayers field to ServerConfig
+// so that an empty value triggers CalcAutoGPULayers (VRAM-based auto-detection)
+// in lifecycle.go, which is smarter than hardcoding "999". This default only
+// applies when EffectiveGPULayers is called directly.
 func (c *ModelConfig) EffectiveGPULayers() string {
 	if c.GPULayers == "" {
 		return "999"
@@ -199,11 +218,11 @@ func (c *ModelConfig) EffectiveGPUComputePct() int {
 	return c.GPUComputePct
 }
 
-// EffectiveGPUMaxAllocPct returns the configured GPU max allocation percentage or 90.
+// EffectiveGPUMaxAllocPct returns the configured GPU max allocation percentage or 80.
 // Clamps to the range [10, 100].
 func (c *ModelConfig) EffectiveGPUMaxAllocPct() int {
 	if c.GPUMaxAllocPct == 0 {
-		return 90
+		return 80
 	}
 	if c.GPUMaxAllocPct < 10 {
 		return 10

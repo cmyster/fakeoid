@@ -27,25 +27,20 @@ func TestEffectiveModelPathExplicit(t *testing.T) {
 	assert.Equal(t, "/custom/path.gguf", cfg.EffectiveModelPath())
 }
 
-func TestEffectiveModelPathEmpty(t *testing.T) {
+func TestEffectiveModelPathDefault(t *testing.T) {
 	cfg := &ModelConfig{}
-	assert.Equal(t, "", cfg.EffectiveModelPath())
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+	// Empty config should derive path from the default model file
+	assert.Equal(t, filepath.Join(home, ".fakeoid", "models", "google_gemma-4-31B-it-Q4_K_M.gguf"), cfg.EffectiveModelPath())
 }
 
 func TestValidateModelIdentity(t *testing.T) {
-	// Both missing
+	// Empty config passes — defaults provide model_file and model_name
 	cfg := &ModelConfig{}
-	assert.Error(t, cfg.ValidateModelIdentity())
+	assert.NoError(t, cfg.ValidateModelIdentity())
 
-	// Only file
-	cfg = &ModelConfig{ModelFile: "model.gguf"}
-	assert.Error(t, cfg.ValidateModelIdentity())
-
-	// Only name
-	cfg = &ModelConfig{ModelName: "MyModel"}
-	assert.Error(t, cfg.ValidateModelIdentity())
-
-	// Both set
+	// Explicit values also pass
 	cfg = &ModelConfig{ModelFile: "model.gguf", ModelName: "MyModel"}
 	assert.NoError(t, cfg.ValidateModelIdentity())
 }
@@ -143,14 +138,15 @@ func TestAllEffectiveDefaults(t *testing.T) {
 	assert.Equal(t, 8080, cfg.EffectivePort())
 	assert.Equal(t, 8192, cfg.EffectiveCtxSize())
 
-	// Model identity (no hardcoded defaults — empty config returns zero values)
-	assert.Equal(t, "", cfg.EffectiveModelRepo())
-	assert.Equal(t, "", cfg.EffectiveModelFile())
-	assert.Equal(t, "", cfg.EffectiveModelURL())
+	// Model identity (defaults to Gemma-4-31B)
+	assert.Equal(t, "bartowski/google_gemma-4-31B-it-GGUF", cfg.EffectiveModelRepo())
+	assert.Equal(t, "google_gemma-4-31B-it-Q4_K_M.gguf", cfg.EffectiveModelFile())
+	assert.Equal(t, "https://huggingface.co/bartowski/google_gemma-4-31B-it-GGUF/resolve/main/google_gemma-4-31B-it-Q4_K_M.gguf", cfg.EffectiveModelURL())
 	assert.Equal(t, "", cfg.EffectiveModelHash())
-	assert.Equal(t, int64(0), cfg.EffectiveModelSize())
-	assert.Equal(t, "", cfg.EffectiveModelName())
-	assert.Equal(t, "", cfg.EffectiveModelPath())
+	assert.Equal(t, int64(19598483328), cfg.EffectiveModelSize())
+	assert.Equal(t, "Gemma-4-31B-Q4_K_M", cfg.EffectiveModelName())
+	home, _ := os.UserHomeDir()
+	assert.Equal(t, filepath.Join(home, ".fakeoid", "models", "google_gemma-4-31B-it-Q4_K_M.gguf"), cfg.EffectiveModelPath())
 
 	// Server
 	assert.Equal(t, "999", cfg.EffectiveGPULayers())
@@ -204,7 +200,7 @@ func TestAllEffectiveDefaults(t *testing.T) {
 	assert.Equal(t, 60, cfg.EffectiveGPUComputePct())
 
 	// GPU VRAM allocation
-	assert.Equal(t, 90, cfg.EffectiveGPUMaxAllocPct())
+	assert.Equal(t, 80, cfg.EffectiveGPUMaxAllocPct())
 }
 
 // TestLoadConfigAllFields writes a JSON with all fields set to non-default values,
@@ -347,8 +343,8 @@ func TestLoadConfigBackwardCompatibleExtended(t *testing.T) {
 	assert.Equal(t, 9090, cfg.EffectivePort())
 	assert.Equal(t, 8192, cfg.EffectiveCtxSize())
 
-	// Model identity fields are empty (no hardcoded defaults)
-	assert.Equal(t, "", cfg.EffectiveModelRepo())
+	// Model identity fields use defaults when not set in config
+	assert.Equal(t, "bartowski/google_gemma-4-31B-it-GGUF", cfg.EffectiveModelRepo())
 	assert.Equal(t, "999", cfg.EffectiveGPULayers())
 	assert.Equal(t, 200, cfg.EffectiveLogBufferMax())
 	assert.Equal(t, 5, cfg.EffectiveKillTimeoutSec())
@@ -489,7 +485,7 @@ func TestEffectiveGPUComputePctCap(t *testing.T) {
 
 func TestEffectiveGPUMaxAllocPctDefault(t *testing.T) {
 	cfg := &ModelConfig{}
-	assert.Equal(t, 90, cfg.EffectiveGPUMaxAllocPct())
+	assert.Equal(t, 80, cfg.EffectiveGPUMaxAllocPct())
 }
 
 func TestEffectiveGPUMaxAllocPctCustom(t *testing.T) {

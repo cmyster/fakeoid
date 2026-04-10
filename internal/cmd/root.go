@@ -75,7 +75,7 @@ var rootCmd = &cobra.Command{
 		// Auto-download model if not cached
 		modelPath := cfg.EffectiveModelPath()
 		if _, err := os.Stat(modelPath); os.IsNotExist(err) {
-			if cfg.ModelURL == "" {
+			if cfg.EffectiveModelURL() == "" {
 				return fmt.Errorf("model not found at %s and model_url not set in config.json for download", modelPath)
 			}
 			fmt.Fprintln(os.Stderr, "No model found. Downloading...")

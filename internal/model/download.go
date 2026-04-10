@@ -114,7 +114,7 @@ func Download(url, destPath string, expectedSize int64, expectedHash string, w i
 
 // DownloadModel downloads the model specified in cfg to the cache location.
 func DownloadModel(cfg *ModelConfig, w io.Writer) error {
-	if cfg.ModelURL == "" {
+	if cfg.EffectiveModelURL() == "" {
 		return fmt.Errorf("model_url is required in config.json for download")
 	}
 	_, err := EnsureCacheDir()
