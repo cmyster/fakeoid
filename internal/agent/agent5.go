@@ -14,24 +14,27 @@ import (
 )
 
 // Agent5 implements the Agent interface for the QE Engineer role.
-// It reads a handoff file from Agent 4, verifies the code builds, and writes tests.
+// It reads a handoff file from Agent 4, verifies the code builds, runs smoke
+// tests against task requirements, and writes unit tests.
 type Agent5 struct {
-	cwd            string
-	taskDir        string
-	handoffFile    string
-	fileTree       string
-	turnCount      int
-	handoffContent string
-	sourceFiles    string
-	readmeContent  string
-	sb             *sandbox.Sandbox
+	cwd              string
+	taskDir          string
+	handoffFile      string
+	fileTree         string
+	turnCount        int
+	handoffContent   string
+	sourceFiles      string
+	readmeContent    string
+	taskRequirements string // enriched prompt or task description for smoke testing
+	sb               *sandbox.Sandbox
 }
 
 // NewAgent5 creates a new Agent 5 (QE Engineer) with the given working directory,
-// task directory, handoff file path, sandbox, and README content. It scans the file
-// tree, reads the handoff content, extracts referenced source files, and reads them
-// from disk.
-func NewAgent5(cwd, taskDir, handoffFile string, sb *sandbox.Sandbox, readmeContent string) *Agent5 {
+// task directory, handoff file path, sandbox, README content, and task requirements.
+// It scans the file tree, reads the handoff content, extracts referenced source
+// files, and reads them from disk. taskRequirements is the enriched prompt or raw
+// task description used for smoke testing (may be empty).
+func NewAgent5(cwd, taskDir, handoffFile string, sb *sandbox.Sandbox, readmeContent, taskRequirements string) *Agent5 {
 	tree, _ := ScanFileTree(cwd, 3, 0, nil)
 
 	handoffContent := ""
@@ -47,14 +50,15 @@ func NewAgent5(cwd, taskDir, handoffFile string, sb *sandbox.Sandbox, readmeCont
 	sourceFiles := readSourceFilesWithSandbox(cwd, filePaths, sb)
 
 	return &Agent5{
-		cwd:            cwd,
-		taskDir:        taskDir,
-		handoffFile:    handoffFile,
-		fileTree:       tree,
-		handoffContent: handoffContent,
-		sourceFiles:    sourceFiles,
-		readmeContent:  readmeContent,
-		sb:             sb,
+		cwd:              cwd,
+		taskDir:          taskDir,
+		handoffFile:      handoffFile,
+		fileTree:         tree,
+		handoffContent:   handoffContent,
+		sourceFiles:      sourceFiles,
+		readmeContent:    readmeContent,
+		taskRequirements: taskRequirements,
+		sb:               sb,
 	}
 }
 
@@ -65,9 +69,10 @@ func (a *Agent5) Number() int { return 5 }
 func (a *Agent5) Name() string { return "QE Engineer" }
 
 // SystemPrompt returns the system prompt for Agent 5, including CWD, file tree,
-// handoff content, source file contents, and README build instructions.
+// handoff content, source file contents, README build instructions, and task
+// requirements for smoke testing.
 func (a *Agent5) SystemPrompt() string {
-	return Agent5SystemPrompt(a.cwd, a.fileTree, a.handoffContent, a.sourceFiles, a.readmeContent)
+	return Agent5SystemPrompt(a.cwd, a.fileTree, a.handoffContent, a.sourceFiles, a.readmeContent, a.taskRequirements)
 }
 
 // HandleResponse processes an LLM response. It increments the turn counter and
@@ -201,6 +206,35 @@ func readSourceFilesWithSandbox(cwd string, filePaths []string, sb *sandbox.Sand
 		fmt.Fprintf(&buf, "### %s\n```%s\n%s\n```\n\n", fp, lang, string(data))
 	}
 	return buf.String()
+}
+
+// RunGoBuild executes `go build ./...` in the given working directory to verify
+// compilation. Returns the captured output, whether the build passed, and any
+// execution error. Build failure (non-zero exit) is indicated by passed=false.
+func RunGoBuild(ctx context.Context, cwd string, liveOut io.Writer) (string, bool, error) {
+	args := []string{"build", "./..."}
+
+	if err := sandbox.ValidateCommand("go", args); err != nil {
+		return "", false, err
+	}
+
+	cmd := exec.CommandContext(ctx, "go", args...)
+	cmd.Dir = cwd
+
+	var captured bytes.Buffer
+	multi := io.MultiWriter(liveOut, &captured)
+	cmd.Stdout = multi
+	cmd.Stderr = multi
+
+	err := cmd.Run()
+	if err != nil {
+		if _, ok := err.(*exec.ExitError); ok {
+			return captured.String(), false, nil
+		}
+		return captured.String(), false, err
+	}
+
+	return captured.String(), true, nil
 }
 
 // RunGoTest executes `go test -v -count=1` for the specified packages in the

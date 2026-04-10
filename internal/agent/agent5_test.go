@@ -21,7 +21,7 @@ func TestAgent5_ImplementsAgent(t *testing.T) {
 	require.NoError(t, err)
 	defer sb.Close()
 
-	a := NewAgent5(dir, dir, handoffFile, sb, "")
+	a := NewAgent5(dir, dir, handoffFile, sb, "", "")
 	var _ Agent = a // compile-time interface check
 	assert.NotNil(t, a)
 }
@@ -52,7 +52,7 @@ func TestAgent5_SystemPrompt_ContainsContext(t *testing.T) {
 	require.NoError(t, err)
 	defer sb.Close()
 
-	a := NewAgent5(dir, dir, handoffFile, sb, "")
+	a := NewAgent5(dir, dir, handoffFile, sb, "", "")
 	prompt := a.SystemPrompt()
 
 	assert.Contains(t, prompt, dir)
@@ -367,7 +367,7 @@ func TestRunBuildAndVerify_FallbackCargo(t *testing.T) {
 
 func TestAgent5SystemPrompt_IncludesReadme(t *testing.T) {
 	readme := "# My Project\n\n## Build\nrustc src/main.rs\n"
-	prompt := Agent5SystemPrompt("/tmp/test", "tree", "handoff", "sources", readme)
+	prompt := Agent5SystemPrompt("/tmp/test", "tree", "handoff", "sources", readme, "build a file lister")
 	assert.Contains(t, prompt, "rustc src/main.rs")
 	assert.Contains(t, prompt, "README.md (Build Instructions)")
 }

@@ -464,10 +464,10 @@ func (c *ModelConfig) EffectiveSSEBufferSize() int {
 	return c.SSEBufferSize
 }
 
-// EffectiveMaxIterations returns the configured max iterations or 10.
+// EffectiveMaxIterations returns the configured max iterations or 100.
 func (c *ModelConfig) EffectiveMaxIterations() int {
 	if c.MaxIterations == 0 {
-		return 10
+		return 100
 	}
 	return c.MaxIterations
 }

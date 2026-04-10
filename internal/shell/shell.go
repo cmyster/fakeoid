@@ -53,6 +53,7 @@ type Shell struct {
 	tokenBudgetPct        int
 	tokenCharDivisor      int
 	maxIterations         int
+	buildVerification     bool
 	slugMaxLen            int
 	treeMaxDepth          int
 	treeMaxLines          int
@@ -81,6 +82,7 @@ type shellConfig struct {
 	tokenBudgetPct        int
 	tokenCharDivisor      int
 	maxIterations         int
+	buildVerification     *bool // nil = default (true)
 	slugMaxLen            int
 	treeMaxDepth          int
 	treeMaxLines          int
@@ -177,6 +179,11 @@ func WithMaxIterations(n int) Option {
 	return func(c *shellConfig) { c.maxIterations = n }
 }
 
+// WithBuildVerification enables or disables Agent 4 build verification before handoff.
+func WithBuildVerification(enabled bool) Option {
+	return func(c *shellConfig) { c.buildVerification = &enabled }
+}
+
 // WithSlugMaxLen sets the maximum slug length for task filenames.
 func WithSlugMaxLen(n int) Option {
 	return func(c *shellConfig) { c.slugMaxLen = n }
@@ -264,6 +271,10 @@ func New(client ChatClient, ctxSize int, modelName, gpuName, historyPath string,
 	if maxIter == 0 {
 		maxIter = 10
 	}
+	buildVerify := true
+	if cfg.buildVerification != nil {
+		buildVerify = *cfg.buildVerification
+	}
 	slugMax := cfg.slugMaxLen
 	if slugMax == 0 {
 		slugMax = 50
@@ -301,6 +312,7 @@ func New(client ChatClient, ctxSize int, modelName, gpuName, historyPath string,
 		tokenBudgetPct:        budgetPct,
 		tokenCharDivisor:      charDiv,
 		maxIterations:         maxIter,
+		buildVerification:     buildVerify,
 		slugMaxLen:            slugMax,
 		treeMaxDepth:          treeDepth,
 		treeMaxLines:          treeLines,
@@ -1125,6 +1137,13 @@ func (s *Shell) runPipeline(ctx context.Context, taskFilePath string) error {
 		}
 		fmt.Fprintln(s.stderr)
 
+		// Verify build before handoff
+		var buildErr error
+		results, buildErr = s.verifyAgent4Build(ctx, cwd, &allResponses, results)
+		if buildErr != nil {
+			return buildErr
+		}
+
 		// Write handoff file
 		taskBase := filepath.Base(taskFilePath)
 		hp, handoffErr := agent.WriteHandoffFile(s.sandbox, s.runner.TaskDir(), taskBase, results, allResponses.String())
@@ -1207,11 +1226,22 @@ func (s *Shell) runAgent5Phase(ctx context.Context, handoffPath string, taskFile
 	// Read README.md for build instructions (used by Agent 5 prompt and verification)
 	readmeContent := agent.ReadBuildInstructions(cwd, s.sandbox)
 
-	a5 := agent.NewAgent5(cwd, s.runner.TaskDir(), handoffPath, s.sandbox, readmeContent)
+	// Read task requirements for smoke testing: prefer enriched prompt, fall back to raw task file
+	taskRequirements := ""
+	base := strings.TrimSuffix(taskFileName, ".md")
+	enrichedPath := filepath.Join(s.runner.TaskDir(), base+"-enriched.md")
+	taskPath := filepath.Join(s.runner.TaskDir(), taskFileName)
+	if data, err := os.ReadFile(enrichedPath); err == nil {
+		taskRequirements = string(data)
+	} else if data, err := os.ReadFile(taskPath); err == nil {
+		taskRequirements = string(data)
+	}
+
+	a5 := agent.NewAgent5(cwd, s.runner.TaskDir(), handoffPath, s.sandbox, readmeContent, taskRequirements)
 	s.runner.SwitchAgent(a5)
 
 	// Inject instruction as first user message
-	s.runner.AppendUserMessage("Write tests for the code changes in the handoff. Use the README.md build instructions to verify the code compiles.")
+	s.runner.AppendUserMessage("Verify the code changes from the handoff. Follow all 4 steps: sanity, smoke, unit tests, summary.")
 
 	// Autonomous loop: stream -> HandleResponse -> break on ActionComplete
 	var allResponses strings.Builder
@@ -1435,6 +1465,13 @@ func (s *Shell) runAgent4FixPhase(ctx context.Context, taskFilePath, testOutput 
 		}
 		fmt.Fprintln(s.stderr)
 
+		// Verify build before handoff
+		var buildErr error
+		results, buildErr = s.verifyAgent4Build(ctx, cwd, &allResponses, results)
+		if buildErr != nil {
+			return "", buildErr
+		}
+
 		// Write handoff file
 		taskBase := filepath.Base(taskFilePath)
 		hp, handoffErr := agent.WriteHandoffFile(s.sandbox, s.runner.TaskDir(), taskBase, results, allResponses.String())
@@ -1454,6 +1491,79 @@ func (s *Shell) runAgent4FixPhase(ctx context.Context, taskFilePath, testOutput 
 	}
 
 	return handoffPath, nil
+}
+
+// verifyAgent4Build checks that Agent 4's code compiles before handoff.
+// If the build fails, it feeds the error back to Agent 4 and retries up to 3 times.
+// Returns updated results (appended with any retry file writes) and error.
+func (s *Shell) verifyAgent4Build(ctx context.Context, cwd string, allResponses *strings.Builder, results []agent.FileResult) ([]agent.FileResult, error) {
+	if !s.buildVerification {
+		return results, nil
+	}
+	readmeContent := agent.ReadBuildInstructions(cwd, s.sandbox)
+
+	const maxAttempts = 3
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		var buildOutput string
+		var buildPassed bool
+		var buildErr error
+
+		fmt.Fprintf(s.stderr, "--- Build check (attempt %d/%d) ---\n", attempt, maxAttempts)
+		if agent.IsGoProject(cwd) {
+			buildOutput, buildPassed, buildErr = agent.RunGoBuild(ctx, cwd, s.stderr)
+		} else {
+			buildOutput, buildPassed, buildErr = agent.RunBuildAndVerify(ctx, cwd, readmeContent, s.stderr)
+		}
+		if buildErr != nil {
+			return results, buildErr
+		}
+		if buildPassed {
+			fmt.Fprintln(s.stderr, "--- Build passed ---")
+			return results, nil
+		}
+
+		if attempt == maxAttempts {
+			fmt.Fprintf(s.stderr, "--- Build still failing after %d attempts, proceeding to handoff ---\n", maxAttempts)
+			return results, nil
+		}
+
+		// Build failed -- feed error back to Agent 4
+		fmt.Fprintf(s.stderr, "--- Build failed, sending back to Agent 4 ---\n")
+		s.runner.AppendUserMessage("The code does not compile. Fix the compilation errors:\n\n```\n" + buildOutput + "\n```\n\nOutput the corrected file contents.")
+
+		var retryResponses strings.Builder
+		for {
+			responseBuf, streamErr := s.streamResponse(ctx)
+			if streamErr != nil {
+				return results, streamErr
+			}
+			s.runner.AppendAssistantMessage(responseBuf)
+			retryResponses.WriteString(responseBuf)
+			allResponses.WriteString(responseBuf)
+
+			action := s.runner.Active().HandleResponse(responseBuf)
+			if action.Type == agent.ActionComplete {
+				break
+			}
+			s.runner.AppendUserMessage("Continue implementing. Output any remaining code blocks.")
+		}
+
+		retryBlocks := agent.ParseCodeBlocks(retryResponses.String())
+		if len(retryBlocks) > 0 {
+			retryResults, retryBlocked := agent.WriteCodeBlocks(s.sandbox, retryBlocks)
+			fmt.Fprintln(s.stderr)
+			for _, r := range retryResults {
+				fmt.Fprintf(s.stderr, "  \u2713 %s (%s)\n", r.Path, r.Action)
+			}
+			for _, b := range retryBlocked {
+				fmt.Fprintf(s.stderr, "  X %s (blocked: %s)\n", b.Path, b.Reason)
+			}
+			fmt.Fprintln(s.stderr)
+			results = append(results, retryResults...)
+		}
+	}
+
+	return results, nil
 }
 
 // runFeedbackLoop orchestrates the Agent 5 (test) -> Agent 6 (review) -> Agent 4 (fix) feedback cycle.
@@ -1736,6 +1846,13 @@ func (s *Shell) runPipelineFromAgent4(ctx context.Context, taskFilePath, changeP
 			fmt.Fprintf(s.stderr, "  X %s (blocked: %s)\n", b.Path, b.Reason)
 		}
 		fmt.Fprintln(s.stderr)
+
+		// Verify build before handoff
+		var buildErr error
+		results, buildErr = s.verifyAgent4Build(ctx, cwd, &allResponses, results)
+		if buildErr != nil {
+			return buildErr
+		}
 
 		taskBase := filepath.Base(taskFilePath)
 		hp, handoffErr := agent.WriteHandoffFile(s.sandbox, s.runner.TaskDir(), taskBase, results, allResponses.String())

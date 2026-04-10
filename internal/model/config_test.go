@@ -185,7 +185,7 @@ func TestAllEffectiveDefaults(t *testing.T) {
 	assert.Equal(t, 1024*1024, cfg.EffectiveSSEBufferSize())
 
 	// Feedback loop
-	assert.Equal(t, 10, cfg.EffectiveMaxIterations())
+	assert.Equal(t, 100, cfg.EffectiveMaxIterations())
 
 	// GPU compute throttling
 	assert.Equal(t, 60, cfg.EffectiveGPUComputePct())
@@ -343,7 +343,7 @@ func TestLoadConfigBackwardCompatibleExtended(t *testing.T) {
 	assert.Equal(t, 500, cfg.EffectiveHistoryLimit())
 	assert.Equal(t, ".fakeoid", cfg.EffectiveConfigDirName())
 	assert.Equal(t, 3, cfg.EffectiveTreeMaxDepth())
-	assert.Equal(t, 10, cfg.EffectiveMaxIterations())
+	assert.Equal(t, 100, cfg.EffectiveMaxIterations())
 }
 
 // TestEffectiveSliceFieldsNilVsEmpty verifies nil returns defaults, empty returns empty.

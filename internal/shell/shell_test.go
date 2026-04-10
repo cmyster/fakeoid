@@ -83,6 +83,7 @@ func newTestShellWithRunner(t *testing.T, input string, client ChatClient, ctxSi
 		WithStdout(stdout),
 		WithStderr(stderr),
 		WithAgentRunner(runner),
+		WithBuildVerification(false),
 	)
 	require.NoError(t, err)
 	return sh, stdout, stderr

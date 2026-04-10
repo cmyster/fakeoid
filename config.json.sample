@@ -103,5 +103,5 @@
 
   // --- Feedback Loop ---
   // Maximum iterations for the Agent 5/6 feedback loop before stopping
-  "max_iterations": 10
+  "max_iterations": 100
 }
