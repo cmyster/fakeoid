@@ -45,9 +45,11 @@ func NewAgent5(cwd, taskDir, handoffFile string, sb *sandbox.Sandbox, readmeCont
 		}
 	}
 
-	// Extract file paths from handoff to read source files
+	// Extract file paths from handoff to read source files.
+	// Cap total source content to ~16KB (~4000 tokens) to avoid exceeding
+	// the LLM context window when injected into the system prompt.
 	filePaths := extractFilePaths(handoffContent)
-	sourceFiles := readSourceFilesWithSandbox(cwd, filePaths, sb)
+	sourceFiles := readSourceFilesWithSandbox(cwd, filePaths, sb, 16384)
 
 	return &Agent5{
 		cwd:              cwd,
@@ -173,27 +175,43 @@ func languageFromExt(path string) string {
 
 // readSourceFiles reads the given file paths from disk relative to cwd and
 // formats them as markdown code blocks for LLM context injection.
-func readSourceFiles(cwd string, filePaths []string) string {
+// maxBytes caps the total output size; 0 means unlimited.
+func readSourceFiles(cwd string, filePaths []string, maxBytes int) string {
 	var buf strings.Builder
 	for _, fp := range filePaths {
+		if maxBytes > 0 && buf.Len() >= maxBytes {
+			fmt.Fprintf(&buf, "(remaining files omitted — context budget reached)\n")
+			break
+		}
 		data, err := os.ReadFile(filepath.Join(cwd, fp))
 		if err != nil {
 			continue // skip files that can't be read
 		}
 		lang := languageFromExt(fp)
-		fmt.Fprintf(&buf, "### %s\n```%s\n%s\n```\n\n", fp, lang, string(data))
+		entry := fmt.Sprintf("### %s\n```%s\n%s\n```\n\n", fp, lang, string(data))
+		if maxBytes > 0 && buf.Len()+len(entry) > maxBytes {
+			fmt.Fprintf(&buf, "(remaining files omitted — context budget reached)\n")
+			break
+		}
+		buf.WriteString(entry)
 	}
 	return buf.String()
 }
 
 // readSourceFilesWithSandbox reads source files, validating each path against
 // the sandbox before reading. Blocked files are silently skipped.
-func readSourceFilesWithSandbox(cwd string, filePaths []string, sb *sandbox.Sandbox) string {
+// maxBytes caps the total output size to avoid exceeding the LLM context window;
+// 0 means unlimited.
+func readSourceFilesWithSandbox(cwd string, filePaths []string, sb *sandbox.Sandbox, maxBytes int) string {
 	if sb == nil {
-		return readSourceFiles(cwd, filePaths)
+		return readSourceFiles(cwd, filePaths, maxBytes)
 	}
 	var buf strings.Builder
 	for _, fp := range filePaths {
+		if maxBytes > 0 && buf.Len() >= maxBytes {
+			fmt.Fprintf(&buf, "(remaining files omitted — context budget reached)\n")
+			break
+		}
 		absPath := filepath.Join(cwd, fp)
 		if err := sb.ValidateRead(absPath); err != nil {
 			continue // blocked by sandbox
@@ -203,7 +221,12 @@ func readSourceFilesWithSandbox(cwd string, filePaths []string, sb *sandbox.Sand
 			continue // skip files that can't be read
 		}
 		lang := languageFromExt(fp)
-		fmt.Fprintf(&buf, "### %s\n```%s\n%s\n```\n\n", fp, lang, string(data))
+		entry := fmt.Sprintf("### %s\n```%s\n%s\n```\n\n", fp, lang, string(data))
+		if maxBytes > 0 && buf.Len()+len(entry) > maxBytes {
+			fmt.Fprintf(&buf, "(remaining files omitted — context budget reached)\n")
+			break
+		}
+		buf.WriteString(entry)
 	}
 	return buf.String()
 }

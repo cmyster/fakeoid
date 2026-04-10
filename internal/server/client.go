@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -61,7 +62,8 @@ func (c *Client) ChatCompletion(ctx context.Context, messages []Message) (string
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("chat completion failed with status %d", resp.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return "", fmt.Errorf("chat completion failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var chatResp ChatCompletionResponse
@@ -108,7 +110,8 @@ func (c *Client) StreamChatCompletion(ctx context.Context, messages []Message, o
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return result, fmt.Errorf("stream request failed with status %d", resp.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return result, fmt.Errorf("stream request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	scanner := bufio.NewScanner(resp.Body)

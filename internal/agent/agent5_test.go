@@ -130,7 +130,7 @@ func TestReadSourceFiles_ReadsExistingFiles(t *testing.T) {
 	require.NoError(t, os.MkdirAll(srcDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "foo.go"), []byte("package agent\n"), 0o644))
 
-	result := readSourceFiles(dir, []string{"internal/agent/foo.go"})
+	result := readSourceFiles(dir, []string{"internal/agent/foo.go"}, 0)
 	assert.Contains(t, result, "### internal/agent/foo.go")
 	assert.Contains(t, result, "package agent")
 	assert.Contains(t, result, "```go")
@@ -142,7 +142,7 @@ func TestReadSourceFiles_SkipsNonExistentFiles(t *testing.T) {
 	require.NoError(t, os.MkdirAll(srcDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "foo.go"), []byte("package agent\n"), 0o644))
 
-	result := readSourceFiles(dir, []string{"internal/agent/foo.go", "internal/agent/missing.go"})
+	result := readSourceFiles(dir, []string{"internal/agent/foo.go", "internal/agent/missing.go"}, 0)
 	assert.Contains(t, result, "### internal/agent/foo.go")
 	assert.NotContains(t, result, "missing.go")
 }
@@ -295,7 +295,7 @@ func TestReadSourceFiles_UsesLanguageFromExt(t *testing.T) {
 	require.NoError(t, os.MkdirAll(srcDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.rs"), []byte("fn main() {}\n"), 0o644))
 
-	result := readSourceFiles(dir, []string{"src/main.rs"})
+	result := readSourceFiles(dir, []string{"src/main.rs"}, 0)
 	assert.Contains(t, result, "```rust")
 	assert.Contains(t, result, "fn main()")
 }
