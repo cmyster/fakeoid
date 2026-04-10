@@ -34,8 +34,8 @@
   "log_buffer_max": 200,
   // Percentage of GPU compute units to use (10-100, default 60 = leave headroom for desktop)
   "gpu_compute_pct": 60,
-  // Maximum percentage of GPU VRAM allocatable per request (10-100, default 90 = reserve 10% for system)
-  "gpu_max_alloc_pct": 90,
+  // Maximum percentage of GPU VRAM allocatable per request (10-100, default 80 = reserve 20% for system)
+  "gpu_max_alloc_pct": 80,
 
   // --- Timeouts ---
   // Seconds to wait after SIGTERM before sending SIGKILL
