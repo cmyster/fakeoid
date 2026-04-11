@@ -17,9 +17,9 @@ It was build using Go and uses llama-server and git.
 
   3. Download a model (if you haven't already)
   ./fakeoid download
-  Auto-fetches a GGUF model.
+  Auto-fetches default GGUF model, currently its google_gemma-4-31B-it-Q4_K_M.gguf
 
-  4. Run it
+  5. Run it
   cd /some/test/project
   path/fakeoid/fakeoid
 
@@ -34,7 +34,9 @@ It was build using Go and uses llama-server and git.
   * Agent 2 works to streamline the request so an LLM can understand it better.
   * Agent 3 creates the plan and folder/file structure for the project.
   * Agent 4 generates the code.
-  * Agent 5 tries to generate automatic tests.
-  * Agent 6 checks that a final product works and acts as designed.
+  * Agent 5 breakes down testing tasks.
+  * Agent 6.1 knows what the tool does but does not see the code - blackbox testing.
+  * Agent 6.2 doesn't know what the tool does and only sees code - whitebox testing.
+  * Agent 7 verifies that the end result is inline with the task.
 
-  Between agents 4 and 6 a loop would start with fixes and changes as long as agents 5 and 6 are not happy.
+  Between agents 4 and 7 a loop would start with fixes and changes as long as agents 5,6 and 7 are not happy.
