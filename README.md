@@ -42,4 +42,9 @@ It was build using Go and uses llama-server and git.
   * Agent 6.2 doesn't know what the tool does and only sees code - whitebox testing.
   * Agent 7 verifies that the end result is inline with the task.
 
-  Between agents 4 and 7 a loop would start with fixes and changes as long as agents 5,6 and 7 are not happy.
+  ## Verification process
+  Between agents 4 and 7 a loop would start (configurable loop amount). Agent 7 will make sure that not only all tests are passing, but that the code is as defined in the original task:
+  * Agent  4 will make sure that the code is compiling and rewrite if not.
+  * Agents 6.N will each make sure that their respective tests are passing and returnm to agent 4 otherwise with issues.
+  * Agent  7 will check for allignment that the end result matches the original task.
+  
