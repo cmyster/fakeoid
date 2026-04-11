@@ -1,7 +1,8 @@
 # fakeoid
 
 A tool of sorts that would use several agents to acheive simple coding tasks.
-This is not a replacemnt for payed tools which can do the same way fast.
+
+This is not a replacemnt for professional payed tools which can do the same but fast.
 
 ## Requirments
 I am using this for my own hardware, so this tool expects AMD GPU, ROCm and since this tool would also compile and test code, whichever build chains that you need to have.
