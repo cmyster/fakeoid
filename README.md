@@ -30,6 +30,7 @@ It was build using Go and uses llama-server and git.
   5. Give it a task.
 
   Describe something simple to Agent 1, like:
+  
   ▎ Create a cli application in Zig that prints the current running kernel version.
 
   * Agent 1 initializes the request.
