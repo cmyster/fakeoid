@@ -1,6 +1,6 @@
 # fakeoid
 
-A tool of sorts that would use several agents to acheive simple coding tasks.
+A tool which runs several local agents to acheive simple coding tasks.
 
 This is not a replacemnt for professional payed tools which can do the same but fast.
 
